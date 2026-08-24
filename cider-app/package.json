@@ -105,5 +105,14 @@
       "@angular/core": "$@angular/core",
       "@angular/common": "$@angular/common"
     }
+  },
+  "allowScripts": {
+    "electron@25.9.8": true,
+    "esbuild@0.26.0": true,
+    "esbuild@0.25.12": true,
+    "@parcel/watcher@2.5.1": true,
+    "electron-winstaller@5.4.0": true,
+    "lmdb@3.4.3": true,
+    "msgpackr-extract@3.0.3": true
   }
 }
