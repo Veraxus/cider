@@ -19,7 +19,7 @@
         <p-card class="preview-column" styleClass="page-card">
           @if (!disablePanels) {
           <div class="preview-controls">
-            <p-select [options]="cardOptions" [(ngModel)]="selectedCard" [filter]="true" filterBy="name" optionLabel="name"
+            <p-select [options]="cardOptions" [ngModel]="selectedCard" (ngModelChange)="selectCard($event)" [filter]="true" filterBy="name" optionLabel="name"
               optionValue="card" class="card-dropdown"></p-select>
             <p-buttongroup>
               <button pButton type="button" icon="pi pi-search-minus" (click)="changeZoom(ZOOM_DOWN)"

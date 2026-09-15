@@ -1,5 +1,6 @@
 import { Component, HostListener, NgZone, OnInit, inject } from '@angular/core';
 import { PendingSavesService } from '../data-services/services/pending-saves.service';
+import { NamedRouteService } from '../data-services/services/named-route.service';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { NavigationEnd, Router } from '@angular/router';
 import { ExportProgress } from 'dexie-export-import/dist/export';
@@ -38,6 +39,7 @@ export class SiteMenuComponent implements OnInit {
   isSaving: boolean = false;
   private saveInProgress: boolean = false;
   private readonly pendingSaves = inject(PendingSavesService);
+  private readonly namedRouteService = inject(NamedRouteService);
   items: MenuItem[];
   importVisible: boolean = false;
   importFile: File | undefined = undefined;
@@ -524,7 +526,7 @@ export class SiteMenuComponent implements OnInit {
     // reloading always reads from disk, so the crash recovery prompt does not apply
     const projectUnsaved = await firstValueFrom(this.projectUnsaved$);
     if (!projectUnsaved) {
-      this.executeOpenProject(projectHomeUrl, false);
+      this.executeOpenProject(projectHomeUrl, false, true);
       return;
     }
     this.confirmationService.confirm({
@@ -532,7 +534,7 @@ export class SiteMenuComponent implements OnInit {
         + ' All unsaved data will be lost.',
       header: 'Reload Project',
       icon: 'pi pi-exclamation-triangle',
-      accept: () => this.executeOpenProject(projectHomeUrl, false)
+      accept: () => this.executeOpenProject(projectHomeUrl, false, true)
     });
   }
 
@@ -558,11 +560,15 @@ export class SiteMenuComponent implements OnInit {
     }
   }
 
-  private async executeOpenProject(persistentPath: PersistentPath, recover: boolean) {
+  private async executeOpenProject(persistentPath: PersistentPath, recover: boolean, returnToCurrentPage: boolean = false) {
     this.loadingIndeterminate = true;
     this.loadingHeader = 'Opening Project';
     this.loadingInfo = 'Reading project data...';
     this.displayLoading = true;
+    // reloading gives every entity a new id, so remember the current page by entity names
+    const returnRoute = returnToCurrentPage
+      ? await this.namedRouteService.toNamedRoute().catch(() => undefined)
+      : undefined;
     // leave the current page and finish writing its pending edits,
     // so they cannot write stale data into the newly loaded project
     await this.router.navigateByUrl('/');
@@ -581,7 +587,11 @@ export class SiteMenuComponent implements OnInit {
         this.projectStateService.clearDirtyState();
       }
       this.electronService.setProjectOpen(true);
-      this.router.navigateByUrl(`/project`);
+      // go back to the same page, or to the project page if its deck, template, etc. is gone
+      const returnUrl = returnRoute
+        ? await this.namedRouteService.toUrl(returnRoute).catch(() => undefined)
+        : undefined;
+      this.router.navigateByUrl(returnUrl ?? `/project`);
     } catch (error) {
       console.error('Error opening project', error);
     } finally {

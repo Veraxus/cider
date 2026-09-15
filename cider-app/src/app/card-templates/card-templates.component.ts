@@ -7,6 +7,7 @@ import { CardTemplate } from '../data-services/types/card-template.type';
 import { Card } from '../data-services/types/card.type';
 import { Subject, Subscription, debounceTime, groupBy, mergeMap, tap } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
 import { LocalStorageService, PreviewSettings } from '../data-services/local-storage/local-storage.service';
 import { PendingSavesService } from '../data-services/services/pending-saves.service';
 
@@ -114,6 +115,7 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
   private pendingCardSaves: Map<number, Card> = new Map<number, Card>();
   private templateSavePending: boolean = false;
   private readonly pendingSaves = inject(PendingSavesService);
+  private readonly location = inject(Location);
   private unregisterPendingSaves = this.pendingSaves.register(() => this.flushPendingSaves());
   // debounce per card so switching cards mid-edit does not drop the previous card's save
   private cardSaveSubscription: Subscription = this.cardChanges.pipe(
@@ -232,6 +234,12 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     this.refreshCardOptions();
     this.pendingCardSaves.set(card.id, card);
     this.cardChanges.next(card);
+  }
+
+  public selectCard(card: Card) {
+    this.selectedCard = card;
+    // keep the selected card in the url without navigating, so reloading the project returns to it
+    this.location.replaceState(this.location.path().split('?')[0], `cardId=${card.id}`);
   }
 
   private refreshCardOptions() {
