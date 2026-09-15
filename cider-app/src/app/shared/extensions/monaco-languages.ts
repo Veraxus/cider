@@ -39,7 +39,7 @@ export default class MonacoLanguages {
                 };
 
                 // setup card attributes suggestions
-                const variables = ['card.name', 'card.description', 'card.count', 'assets'];
+                const variables = ['card.name', 'card.description', 'card.count', 'card.csv-index', 'assets'];
                 const variableSuggestions = variables.map(variable => {
                     return {
                         label: variable,

@@ -20,6 +20,7 @@ import { firstValueFrom, groupBy, mergeMap, debounceTime, filter } from 'rxjs';
   providedIn: 'root'
 })
 export class CardsService extends DecksChildService<Card, number> {
+  static readonly CSV_INDEX_FIELD = 'csv-index';
 
   constructor(private attributesService: CardAttributesService,
     private cardTemplatesService: CardTemplatesService,
@@ -179,5 +180,35 @@ export class CardsService extends DecksChildService<Card, number> {
 
   override getEntityName(entity: Card) {
     return entity.name;
+  }
+
+  /**
+   * Adds the handlebars property card.csv-index: the 1-based row of the card in its
+   * deck's cards.csv. The csv is written in the same order that getAll returns.
+   */
+  override getAll(equalityCriterias?: { [key: string]: any; }) {
+    return super.getAll(equalityCriterias).then(cards => {
+      cards.forEach((card, index) => (<any>card)[CardsService.CSV_INDEX_FIELD] = index + 1);
+      return cards;
+    });
+  }
+
+  override create(entity: Card, overrideParent?: boolean) {
+    return super.create(CardsService.withoutCsvIndex(entity), overrideParent);
+  }
+
+  override update(id: number, entity: Card, overrideParent?: boolean) {
+    return super.update(id, CardsService.withoutCsvIndex(entity), overrideParent);
+  }
+
+  /**
+   * csv-index is computed on load, so it is never stored
+   */
+  private static withoutCsvIndex(entity: Card): Card {
+    if (!entity || !(CardsService.CSV_INDEX_FIELD in entity)) {
+      return entity;
+    }
+    const { [CardsService.CSV_INDEX_FIELD]: csvIndex, ...stored } = <any>entity;
+    return stored;
   }
 }
