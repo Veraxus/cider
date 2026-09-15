@@ -1,4 +1,5 @@
-import { Component, NgZone, OnInit } from '@angular/core';
+import { Component, HostListener, NgZone, OnInit, inject } from '@angular/core';
+import { PendingSavesService } from '../data-services/services/pending-saves.service';
 import { ConfirmationService, MenuItem, MessageService } from 'primeng/api';
 import { NavigationEnd, Router } from '@angular/router';
 import { ExportProgress } from 'dexie-export-import/dist/export';
@@ -35,6 +36,8 @@ export class SiteMenuComponent implements OnInit {
   projectUnsaved$: Observable<boolean>;
   recentProjectUrlItems: MenuItem[];
   isSaving: boolean = false;
+  private saveInProgress: boolean = false;
+  private readonly pendingSaves = inject(PendingSavesService);
   items: MenuItem[];
   importVisible: boolean = false;
   importFile: File | undefined = undefined;
@@ -392,13 +395,43 @@ export class SiteMenuComponent implements OnInit {
     })
   }
 
+  /**
+   * Ctrl+S (Cmd+S on macOS) saves the project
+   */
+  @HostListener('window:keydown', ['$event'])
+  public onKeyDown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 's') {
+      // stop the browser from opening its own "save page" dialog
+      event.preventDefault();
+      this.saveShortcut();
+    }
+  }
+
+  private async saveShortcut() {
+    if (!this.electronService.isElectron()) {
+      // the web version has no project folder, so only write pending edits to the database
+      await this.pendingSaves.flushAll();
+      return;
+    }
+    // same availability as the File > Save menu item
+    const [projectHomeUrl, projectUnsaved] = await Promise.all([
+      firstValueFrom(this.projectHomeUrl$), firstValueFrom(this.projectUnsaved$)]);
+    if (projectHomeUrl || projectUnsaved) {
+      this.saveProject();
+    }
+  }
+
   public async saveProject() {
+    if (this.saveInProgress) {
+      return;
+    }
     const projectHomeUrl = await firstValueFrom(this.electronService.getProjectHomeUrl());
     if (!projectHomeUrl) {
       console.log('No project directory open.');
       this.saveProjectAs();
       return;
     }
+    this.saveInProgress = true;
 
     // activate the gif
     this.isSaving = true;
@@ -407,44 +440,51 @@ export class SiteMenuComponent implements OnInit {
     this.loadingHeader = 'Saving Project';
     this.loadingInfo = 'Exporting database rows...';
 
-    // save to the filesystem
-    const assetsPromised = this.assetsService.getAll();
-    const documentsPromised = this.documentsService.getAll();
-    const decksPromised = this.decksService.getAll().then(decks => Promise.all(decks.map(async deck => {
-      // cards
-      const [cardFields, cardLookups, cardRecords] = await Promise.all([
-        this.cardsService.getFields({ deckId: deck.id }),
-        this.cardsService.getLookups({ deckId: deck.id }),
-        this.cardsService.getAll({ deckId: deck.id })
-      ]);
-      const cardsCsv = XlsxUtils.entityExport(cardFields, cardLookups, cardRecords);
-      // attributes
-      const [attributeFields, attributeLookups, attributeRecords] = await Promise.all([
-        this.cardAttributesService.getFields({ deckId: deck.id }),
-        this.cardAttributesService.getLookups({ deckId: deck.id }),
-        this.cardAttributesService.getAll({ deckId: deck.id })
-      ]);
-      const attributesCsv = XlsxUtils.entityExport(attributeFields, attributeLookups, attributeRecords);
-      // templates
-      const templates = await this.cardTemplatesService.getAll({ deckId: deck.id });
-      return {
-        id: deck.id,
-        name: StringUtils.toKebabCase(deck.name),
-        cardsCsv: cardsCsv,
-        attributesCsv: attributesCsv,
-        templates: templates
-      };
-    })));
+    try {
+      // write edits still waiting on an editor's debounce so they are included in the save
+      await this.pendingSaves.flushAll();
 
-    Promise.all([assetsPromised, documentsPromised, decksPromised]).then(async ([assets, documents, decks]) => {
+      // save to the filesystem
+      const assetsPromised = this.assetsService.getAll();
+      const documentsPromised = this.documentsService.getAll();
+      const decksPromised = this.decksService.getAll().then(decks => Promise.all(decks.map(async deck => {
+        // cards
+        const [cardFields, cardLookups, cardRecords] = await Promise.all([
+          this.cardsService.getFields({ deckId: deck.id }),
+          this.cardsService.getLookups({ deckId: deck.id }),
+          this.cardsService.getAll({ deckId: deck.id })
+        ]);
+        const cardsCsv = XlsxUtils.entityExport(cardFields, cardLookups, cardRecords);
+        // attributes
+        const [attributeFields, attributeLookups, attributeRecords] = await Promise.all([
+          this.cardAttributesService.getFields({ deckId: deck.id }),
+          this.cardAttributesService.getLookups({ deckId: deck.id }),
+          this.cardAttributesService.getAll({ deckId: deck.id })
+        ]);
+        const attributesCsv = XlsxUtils.entityExport(attributeFields, attributeLookups, attributeRecords);
+        // templates
+        const templates = await this.cardTemplatesService.getAll({ deckId: deck.id });
+        return {
+          id: deck.id,
+          name: StringUtils.toKebabCase(deck.name),
+          cardsCsv: cardsCsv,
+          attributesCsv: attributesCsv,
+          templates: templates
+        };
+      })));
+
+      const [assets, documents, decks] = await Promise.all([assetsPromised, documentsPromised, decksPromised]);
       const dirtyEntities = await firstValueFrom(this.projectStateService.getDirtyEntities());
-      return this.electronService.saveProject(assets, documents, decks, dirtyEntities);
-    }).then(() => {
+      await this.electronService.saveProject(assets, documents, decks, dirtyEntities);
       this.electronService.setProjectUnsaved(false);
       this.projectStateService.clearDirtyState();
+    } catch (error) {
+      console.error('Error saving project', error);
+    } finally {
       this.isSaving = false;
       this.displayLoading = false;
-    });
+      this.saveInProgress = false;
+    }
   }
 
   public async openProject(persistentPath: PersistentPath) {
@@ -469,13 +509,27 @@ export class SiteMenuComponent implements OnInit {
       this.saveProjectAs();
       return;
     }
-    this.openProjectProcedure(projectHomeUrl);
+    // reloading always reads from disk, so the crash recovery prompt does not apply
+    const projectUnsaved = await firstValueFrom(this.projectUnsaved$);
+    if (!projectUnsaved) {
+      this.executeOpenProject(projectHomeUrl, false);
+      return;
+    }
+    this.confirmationService.confirm({
+      message: 'Are you sure that you wish to reload the project from disk?'
+        + ' All unsaved data will be lost.',
+      header: 'Reload Project',
+      icon: 'pi pi-exclamation-triangle',
+      accept: () => this.executeOpenProject(projectHomeUrl, false)
+    });
   }
 
   private openProjectProcedure(persistentPath: PersistentPath) {
     // Check for crash recovery
     const recoveryPath = this.projectStateService.getCrashRecoveryPath();
     if (recoveryPath === persistentPath.path) {
+      // only offer recovery once per app session
+      this.projectStateService.clearCrashRecoveryPath();
       this.confirmationService.confirm({
         message: 'It appears the application closed unexpectedly while working on this project. Do you want to recover your unsaved changes?',
         header: 'Crash Recovery',
@@ -492,27 +546,36 @@ export class SiteMenuComponent implements OnInit {
     }
   }
 
-  private executeOpenProject(persistentPath: PersistentPath, recover: boolean) {
+  private async executeOpenProject(persistentPath: PersistentPath, recover: boolean) {
     this.loadingIndeterminate = true;
     this.loadingHeader = 'Opening Project';
     this.loadingInfo = 'Reading project data...';
     this.displayLoading = true;
+    // leave the current page and finish writing its pending edits,
+    // so they cannot write stale data into the newly loaded project
+    await this.router.navigateByUrl('/');
+    await this.pendingSaves.flushAll();
     this.projectStateService.setTrackingEnabled(false);
-    this.electronService.openProject(persistentPath, this.db, this.assetsService, this.decksService,
-      this.cardTemplatesService, this.cardAttributesService, this.cardsService,
-      this.documentsService, recover).then(async () => {
-        this.projectStateService.setTrackingEnabled(true);
-        this.assetsService.updateAssetUrls();
-        this.decksService.selectDeck(undefined);
-        if (recover) {
-          await this.projectStateService.markAllDirty();
-        } else {
-          this.projectStateService.clearDirtyState();
-        }
-        this.electronService.setProjectOpen(true);
-        this.router.navigateByUrl(`/project`);
-        this.displayLoading = false;
-      });
+    try {
+      await this.electronService.openProject(persistentPath, this.db, this.assetsService, this.decksService,
+        this.cardTemplatesService, this.cardAttributesService, this.cardsService,
+        this.documentsService, recover);
+      this.projectStateService.setTrackingEnabled(true);
+      this.assetsService.updateAssetUrls();
+      this.decksService.selectDeck(undefined);
+      if (recover) {
+        await this.projectStateService.markAllDirty();
+      } else {
+        this.projectStateService.clearDirtyState();
+      }
+      this.electronService.setProjectOpen(true);
+      this.router.navigateByUrl(`/project`);
+    } catch (error) {
+      console.error('Error opening project', error);
+    } finally {
+      this.projectStateService.setTrackingEnabled(true);
+      this.displayLoading = false;
+    }
   }
 
   public titlebarDoubleClick() {

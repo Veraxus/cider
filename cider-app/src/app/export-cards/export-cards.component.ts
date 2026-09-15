@@ -1,4 +1,5 @@
-import { AfterViewChecked, Component, OnInit, QueryList, ViewChildren } from '@angular/core';
+import { AfterViewChecked, Component, DestroyRef, OnInit, QueryList, ViewChildren, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CardPreviewComponent } from '../card-preview/card-preview.component';
 import { CardTemplatesService } from '../data-services/services/card-templates.service';
 import { CardsService } from '../data-services/services/cards.service';
@@ -48,6 +49,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
 
   private autoFitDone: boolean = false;
   private initializationDone: boolean = false;
+  private readonly destroyRef = inject(DestroyRef);
 
   public exportType: string = ExportCardsComponent.SHEET_EXPORT;
   public exportOptions: RadioOption[] = [];
@@ -155,7 +157,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   }
 
   ngOnInit(): void {
-    this.translate.stream('welcome.title').subscribe(async () => {
+    this.translate.stream('welcome.title').pipe(takeUntilDestroyed(this.destroyRef)).subscribe(async () => {
       await this.updateOptions();
       this.loadSettings();
       this.initializationDone = true;

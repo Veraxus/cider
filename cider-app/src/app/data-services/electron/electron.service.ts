@@ -10,7 +10,7 @@ import { CardAttributesService } from '../services/card-attributes.service';
 import { CardsService } from '../services/cards.service';
 import { DecksService } from '../services/decks.service';
 import XlsxUtils from 'src/app/shared/utils/xlsx-utils';
-import { EntityService } from '../types/entity-service.type';
+import { IndexedDbService } from '../indexed-db/indexed-db.service';
 import { Subject } from 'rxjs';
 import { DocumentsService } from '../services/documents.service';
 import { PersistentPath } from '../types/persistent-path.type';
@@ -100,7 +100,10 @@ export class ElectronService {
   }
 
   public setProjectUnsaved(unsaved: boolean) {
-    this.projectUnsaved.next(unsaved);
+    // every database change calls this, so only emit when the value changes
+    if (this.projectUnsaved.getValue() !== unsaved) {
+      this.projectUnsaved.next(unsaved);
+    }
   }
 
   public setProjectOpen(isOpen: boolean) {
@@ -529,9 +532,17 @@ export class ElectronService {
     return true;
   }
 
-  public async openProject(homeUrl: PersistentPath, db: AppDB, assetsService: AssetsService, decksService: DecksService,
+  public openProject(homeUrl: PersistentPath, db: AppDB, assetsService: AssetsService, decksService: DecksService,
     cardTemplatesService: CardTemplatesService, cardAttributesService: CardAttributesService,
     cardsService: CardsService, documentsService: DocumentsService, recover: boolean = false) {
+    // loading emits one reset event at the end instead of a change event per row
+    return db.withoutChangeEvents(() => this.loadProject(homeUrl, db, assetsService, decksService,
+      cardTemplatesService, cardAttributesService, cardsService, documentsService, recover));
+  }
+
+  private async loadProject(homeUrl: PersistentPath, db: AppDB, assetsService: AssetsService, decksService: DecksService,
+    cardTemplatesService: CardTemplatesService, cardAttributesService: CardAttributesService,
+    cardsService: CardsService, documentsService: DocumentsService, recover: boolean) {
     if (!this.isElectron()) {
       return;
     }
@@ -541,12 +552,7 @@ export class ElectronService {
 
     if (!recover) {
       // Only wipe DB if not recovering
-      await documentsService.emptyTable();
-      await assetsService.emptyTable();
-      await cardTemplatesService.emptyTable();
-      await cardAttributesService.emptyTable();
-      await cardsService.emptyTable();
-      await decksService.emptyTable();
+      await db.clearProjectTables();
     } else {
       console.log('Recovering project - skipping DB wipe and file read');
       // Just setup the environment
@@ -627,21 +633,25 @@ export class ElectronService {
     // Save folders to DB
     await db.table(AppDB.ASSET_FOLDERS_TABLE).bulkAdd(Array.from(folderPaths).map(p => ({ path: p })));
 
-    // Load assets
-    await Promise.all(assetFiles.map(async fileInfo => {
-      const assetBuffer = await this.readFile({ bookmark: homeUrl.bookmark, path: fileInfo.path });
-      if (!assetBuffer) return;
+    // Load assets in small batches so only a few files are held in memory at once
+    const assetBatchSize = 8;
+    for (let i = 0; i < assetFiles.length; i += assetBatchSize) {
+      const assets = await Promise.all(assetFiles.slice(i, i + assetBatchSize).map(async fileInfo => {
+        const assetBuffer = await this.readFile({ bookmark: homeUrl.bookmark, path: fileInfo.path });
+        if (!assetBuffer) return undefined;
 
-      const fileType = StringUtils.extensionToMime(fileInfo.extension);
-      const blob: Blob = new Blob([new Uint8Array(assetBuffer)], { type: fileType });
-      const file: File = new File([blob], fileInfo.name, { type: fileType });
+        const fileType = StringUtils.extensionToMime(fileInfo.extension);
+        const blob: Blob = new Blob([new Uint8Array(assetBuffer)], { type: fileType });
+        const file: File = new File([blob], fileInfo.name, { type: fileType });
 
-      await assetsService.create(<any>{
-        file: file,
-        name: fileInfo.name,
-        path: fileInfo.relativePath
-      }, true);
-    }));
+        return <any>{
+          file: file,
+          name: fileInfo.name,
+          path: fileInfo.relativePath
+        };
+      }));
+      await assetsService.bulkCreate(assets.filter(asset => asset));
+    }
     const deckUrls = await this.listDirectory({ bookmark: homeUrl.bookmark, path: decksUrl });
     await Promise.all(deckUrls.filter(deckUrl => deckUrl.isDirectory).map(async deckUrl => {
       const deckName = deckUrl.name;
@@ -673,7 +683,7 @@ export class ElectronService {
   }
 
   private async importCsv<Entity, Identity extends string | number>(persistentPath: PersistentPath, fileName: string,
-    service: EntityService<Entity, Identity>, deckId: number) {
+    service: IndexedDbService<Entity, Identity>, deckId: number) {
     const nameSplit = StringUtils.splitNameAndExtension(fileName);
     const fileType = StringUtils.extensionToMime(nameSplit.extension);
     const buffer = await this.readFile(persistentPath);
@@ -687,10 +697,9 @@ export class ElectronService {
       await service.getFields({ deckId: deckId }),
       await service.getLookups({ deckId: deckId }),
       file);
-    const createdEntities = await Promise.all(entities.map(entity => {
-      (<any>entity)['deckId'] = deckId;
-      return service.create(entity, true);
-    }));
+    entities.forEach(entity => (<any>entity)['deckId'] = deckId);
+    // one transaction for the whole file; rows keep their csv order
+    await service.bulkCreate(entities);
     return true;
   }
 

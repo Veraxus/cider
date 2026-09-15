@@ -201,6 +201,10 @@ export class CardsService extends DecksChildService<Card, number> {
     return super.update(id, CardsService.withoutCsvIndex(entity), overrideParent);
   }
 
+  override bulkCreate(entities: Card[]) {
+    return super.bulkCreate(entities.map(entity => CardsService.withoutCsvIndex(entity)));
+  }
+
   /**
    * csv-index is computed on load, so it is never stored
    */

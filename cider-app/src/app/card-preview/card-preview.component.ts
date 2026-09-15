@@ -1,4 +1,5 @@
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Input, OnChanges, OnDestroy, OnInit, QueryList, SecurityContext, SimpleChanges, ViewChildren } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, Input, OnChanges, OnDestroy, OnInit, QueryList, SecurityContext, SimpleChanges, ViewChildren, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AssetsService } from '../data-services/services/assets.service';
 import { CardTemplate } from '../data-services/types/card-template.type';
 import { Card } from '../data-services/types/card.type';
@@ -41,6 +42,7 @@ export class CardPreviewComponent implements OnInit, AfterViewInit, OnChanges, O
   private isLoadedSubject: AsyncSubject<boolean>;
   private isCacheLoadedSubject: AsyncSubject<boolean>;
   private resizeObserver?: ResizeObserver;
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor(
     private assetsService: AssetsService,
@@ -78,7 +80,7 @@ export class CardPreviewComponent implements OnInit, AfterViewInit, OnChanges, O
   }
 
   ngOnInit(): void {
-    this.assetsService.getAssetUrls().subscribe(assetUrls => {
+    this.assetsService.getAssetUrls().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(assetUrls => {
       this.assetUrls = assetUrls;
       this.changeDetectorRef.markForCheck();
     });

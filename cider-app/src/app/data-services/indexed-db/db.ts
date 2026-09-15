@@ -40,6 +40,8 @@ export class AppDB extends Dexie {
     private changeSubject: Subject<any>;
     private loadSubject: Subject<null>;
     private isPopulating: boolean = false;
+    private changeEventsSuspended: boolean = false;
+    private deletingHooks = new Map<string, (primKey: any, obj: any, trans: any) => void>();
 
     constructor(httpClient: HttpClient,
         electronService: ElectronService,
@@ -185,7 +187,7 @@ export class AppDB extends Dexie {
 
         // Add hooks for granular dirty tracking
         const trackChange = (tableName: string, type: string, key: any) => {
-            if (!this.isPopulating) {
+            if (!this.isPopulating && !this.changeEventsSuspended) {
                 this.changeSubject.next({ tableName, type, key });
             }
         };
@@ -215,11 +217,40 @@ export class AppDB extends Dexie {
             this.table(t.name).hook('updating', (mods, primKey, obj, trans) => {
                 trackChange(t.name, 'update', primKey);
             });
-            this.table(t.name).hook('deleting', (primKey, obj, trans) => {
+            const deletingHook = (primKey: any, obj: any, trans: any) => {
                 trackChange(t.name, 'delete', primKey);
-            });
+            };
+            this.deletingHooks.set(t.name, deletingHook);
+            this.table(t.name).hook('deleting', deletingHook);
         });
 
+    }
+
+    /**
+     * Empty every project table. The deleting hooks are paused while clearing because
+     * Dexie's clear() otherwise reads every row (including asset data) to fire them.
+     */
+    public async clearProjectTables() {
+        const hooks = Array.from(this.deletingHooks.entries());
+        hooks.forEach(([tableName, hook]) => this.table(tableName).hook.deleting.unsubscribe(hook));
+        try {
+            await Promise.all(hooks.map(([tableName]) => this.table(tableName).clear()));
+        } finally {
+            hooks.forEach(([tableName, hook]) => this.table(tableName).hook('deleting', hook));
+        }
+    }
+
+    /**
+     * Run bulk work without a change event per row, then emit a single reset event
+     */
+    public async withoutChangeEvents<T>(work: () => Promise<T>): Promise<T> {
+        this.changeEventsSuspended = true;
+        try {
+            return await work();
+        } finally {
+            this.changeEventsSuspended = false;
+            this.changeSubject.next({ tableName: 'all', type: 'reset', key: null });
+        }
     }
 
     async populateFromFile(emitChange: boolean = true) {

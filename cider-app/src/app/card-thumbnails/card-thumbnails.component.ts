@@ -1,4 +1,5 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { CardTemplatesService } from '../data-services/services/card-templates.service';
 import { CardsService } from '../data-services/services/cards.service';
@@ -13,6 +14,7 @@ import { TranslateService } from '@ngx-translate/core';
 })
 export class CardThumbnailsComponent implements OnInit {
   @ViewChild('dv') dv!: DataView;
+  private readonly destroyRef = inject(DestroyRef);
   thumbnailCards: Card[] = [];
   zoomLevel: number = 0.3;
   zoomOptions: any[] = [
@@ -48,7 +50,7 @@ export class CardThumbnailsComponent implements OnInit {
 
     // update side options labels and copy options labels
     // whenever the language changes
-    this.translate.stream('welcome.title').subscribe(() => {
+    this.translate.stream('welcome.title').pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.sideOptions[0].label = this.translate.instant('controls.fronts');
       this.sideOptions[1].label = this.translate.instant('controls.backs');
       this.sideOptions[2].label = this.translate.instant('controls.both');

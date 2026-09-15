@@ -110,6 +110,17 @@ export class IndexedDbService<Entity, Identity extends string | number> implemen
       this.db.table(this.tableName).get(entityId));
   }
 
+  /**
+   * Create many entities in a single transaction
+   */
+  bulkCreate(entities: Entity[]): Promise<void> {
+    return this.db.table(this.tableName).bulkAdd(entities).then(() => undefined);
+  }
+
+  count(): Promise<number> {
+    return this.db.table(this.tableName).count();
+  }
+
   update(id: Identity, entity: Entity): Promise<Entity> {
     return this.db.table(this.tableName).put(entity, id).then(entityId => 
       this.db.table(this.tableName).get(entityId));

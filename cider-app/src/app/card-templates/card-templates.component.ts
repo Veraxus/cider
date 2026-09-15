@@ -1,13 +1,14 @@
-import { Component, OnInit, HostListener, SecurityContext, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, HostListener, SecurityContext, ViewChild, ElementRef, AfterViewInit, OnDestroy, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { CardTemplatesService } from '../data-services/services/card-templates.service';
 import { CardsService } from '../data-services/services/cards.service';
 import { CardTemplate } from '../data-services/types/card-template.type';
 import { Card } from '../data-services/types/card.type';
-import { Subject, Subscription, debounceTime, groupBy, mergeMap } from 'rxjs';
+import { Subject, Subscription, debounceTime, groupBy, mergeMap, tap } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { LocalStorageService, PreviewSettings } from '../data-services/local-storage/local-storage.service';
+import { PendingSavesService } from '../data-services/services/pending-saves.service';
 
 const templateCssFront  = 
 `.card {
@@ -111,6 +112,9 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
   private resizeObserver: ResizeObserver | null = null;
   private cardChanges: Subject<Card> = new Subject<Card>();
   private pendingCardSaves: Map<number, Card> = new Map<number, Card>();
+  private templateSavePending: boolean = false;
+  private readonly pendingSaves = inject(PendingSavesService);
+  private unregisterPendingSaves = this.pendingSaves.register(() => this.flushPendingSaves());
   // debounce per card so switching cards mid-edit does not drop the previous card's save
   private cardSaveSubscription: Subscription = this.cardChanges.pipe(
     groupBy(card => card.id),
@@ -175,8 +179,10 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
         }
       });
     });
-    this.templateChanges.asObservable().pipe(debounceTime(1000))
-      .subscribe(() => this.save(this.selectedTemplate));
+    this.templateChanges.asObservable().pipe(
+      tap(() => this.templateSavePending = true),
+      debounceTime(1000)
+    ).subscribe(() => this.saveTemplateIfPending());
   }
 
   public saveSettings() {
@@ -215,9 +221,10 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }
-    // save any card edits still waiting on the debounce
+    // save template and card edits still waiting on the debounce
     this.cardSaveSubscription.unsubscribe();
-    Array.from(this.pendingCardSaves.values()).forEach(card => this.saveCard(card));
+    this.unregisterPendingSaves();
+    this.pendingSaves.track(this.flushPendingSaves());
   }
 
   public onCardEdited(card: Card) {
@@ -231,11 +238,30 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     this.cardOptions = this.cards.map(card => ({ name: card.name, card: card }));
   }
 
-  private saveCard(card: Card) {
-    if (!this.pendingCardSaves.delete(card.id)) {
-      return;
+  /**
+   * Save template and card edits that are still waiting on the debounce
+   */
+  private flushPendingSaves(): Promise<unknown> {
+    const cardSaves = Array.from(this.pendingCardSaves.values()).map(card => this.saveCard(card));
+    return Promise.all([this.saveTemplateIfPending(), ...cardSaves]);
+  }
+
+  private saveTemplateIfPending(): Promise<unknown> {
+    const id = this.selectedTemplate.id;
+    if (!this.templateSavePending || !id) {
+      return Promise.resolve();
     }
-    this.cardsService.update(card.id, card).catch(error => {
+    this.templateSavePending = false;
+    return this.service.update(id, this.selectedTemplate, true).catch(error => {
+      console.error(`Error saving template with ID ${id}:`, error);
+    });
+  }
+
+  private saveCard(card: Card): Promise<unknown> {
+    if (!this.pendingCardSaves.delete(card.id)) {
+      return Promise.resolve();
+    }
+    return this.cardsService.update(card.id, card).catch(error => {
       console.error(`Error saving card with ID ${card.id}:`, error);
     });
   }

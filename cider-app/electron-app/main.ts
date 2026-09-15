@@ -293,11 +293,17 @@ try {
    * Watch directory
    */
   let watcher: any = null;
+  let watchedPath: string | null = null;
   ipcMain.handle('watch-directory', async (event, persistentPath) => {
+    // reloading the same project keeps the running watcher instead of rescanning the whole tree
+    if (watcher && watchedPath === persistentPath.path) {
+      return true;
+    }
     const stopAccess = requestPathAccess(persistentPath);
     if (watcher) {
-      watcher.close();
+      await watcher.close();
     }
+    watchedPath = persistentPath.path;
     const chokidar = require('chokidar');
     watcher = chokidar.watch(persistentPath.path, {
       ignored: /(^|[\/\\])\../, // ignore dotfiles
@@ -334,8 +340,9 @@ try {
 
   ipcMain.handle('unwatch-directory', async (event) => {
     if (watcher) {
-      watcher.close();
+      await watcher.close();
       watcher = null;
+      watchedPath = null;
       console.log('stopped watching directory');
     }
     return true;

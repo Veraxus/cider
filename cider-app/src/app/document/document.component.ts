@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Document } from '../data-services/types/document.type';
 import { DocumentsService } from '../data-services/services/documents.service';
-import { debounceTime, Subject, Subscription } from 'rxjs';
+import { PendingSavesService } from '../data-services/services/pending-saves.service';
+import { debounceTime, Subject, Subscription, tap } from 'rxjs';
 import { ThemeService } from '../data-services/theme/theme.service';
 
 @Component({
@@ -29,6 +30,9 @@ export class DocumentComponent implements OnInit, OnDestroy {
   private editor: any;
   private monaco: any;
   private themeSubscription: Subscription | null = null;
+  private readonly pendingSaves = inject(PendingSavesService);
+  private documentSavePending: boolean = false;
+  private unregisterPendingSaves = this.pendingSaves.register(() => this.saveIfPending());
 
   constructor(private route: ActivatedRoute,
     private themeService: ThemeService,
@@ -85,8 +89,10 @@ export class DocumentComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.documentChanges.asObservable().pipe(debounceTime(1000))
-      .subscribe(() => this.save(this.textDocument));
+    this.documentChanges.asObservable().pipe(
+      tap(() => this.documentSavePending = true),
+      debounceTime(1000)
+    ).subscribe(() => this.saveIfPending());
 
     // Subscribe to theme changes for Monaco editor
     this.themeSubscription = this.themeService.currentTheme$.subscribe(theme => {
@@ -106,6 +112,23 @@ export class DocumentComponent implements OnInit, OnDestroy {
     if (this.themeSubscription) {
       this.themeSubscription.unsubscribe();
     }
+    this.unregisterPendingSaves();
+    // write document edits from the last second instead of dropping them
+    this.pendingSaves.track(this.saveIfPending());
+  }
+
+  /**
+   * Save document edits that are still waiting on the debounce
+   */
+  private saveIfPending(): Promise<unknown> {
+    const id = (<any>this.textDocument)[this.documentsService.getIdField()];
+    if (!this.documentSavePending || !id) {
+      return Promise.resolve();
+    }
+    this.documentSavePending = false;
+    return this.documentsService.update(id, this.textDocument).catch(error => {
+      console.error(`Error saving document with ID ${id}:`, error);
+    });
   }
 
   public save(entity: Document) {

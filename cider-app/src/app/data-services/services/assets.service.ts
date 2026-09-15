@@ -274,6 +274,10 @@ export class AssetsService extends IndexedDbService<Asset, number> {
     });
   }
 
+  override bulkCreate(entities: Asset[]) {
+    return Promise.all(entities.map(AssetsService.insertArrayBuffer)).then(entities => super.bulkCreate(entities));
+  }
+
   override update(id: number, entity: Asset) {
     return AssetsService.insertArrayBuffer(entity).then(entity => super.update(id, entity)).then(entity => {
       this.updateAssetUrls();
@@ -476,10 +480,11 @@ export class AssetsService extends IndexedDbService<Asset, number> {
     // This avoids expensive recursive filesystem scans via IPC in Electron mode.
     // The assetFolders table is kept in sync during project open and via file watcher events.
     const explicitFolders = await this.db.table(AppDB.ASSET_FOLDERS_TABLE).toArray().then(rows => rows.map(r => r.path));
-    const assets = await this.getAll();
+    // read asset paths from the path index so the asset file data is not loaded
+    const assetPaths = await this.db.table(AppDB.ASSETS_TABLE).orderBy('path').uniqueKeys();
     const derivedFolders = new Set<string>();
-    assets.forEach(a => {
-      if (a.path) derivedFolders.add(a.path);
+    assetPaths.forEach(path => {
+      if (path) derivedFolders.add(path as string);
     });
     const allFolders = new Set([...explicitFolders, ...derivedFolders]);
     // Expand parent paths: if "a/b/c" exists, ensure "a/b" and "a" also exist.

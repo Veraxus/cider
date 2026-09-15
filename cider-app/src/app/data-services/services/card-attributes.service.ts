@@ -158,17 +158,21 @@ export class CardAttributesService extends DecksChildService<CardAttribute, numb
   }
 
   override create(entity: CardAttribute, overrideParent?: boolean | undefined): Promise<CardAttribute> {
-    const normalizedType = (entity.type as string)?.toLowerCase().trim();
-    if (normalizedType === FieldType.dropdown || normalizedType === 'option') {
-      if ((entity.type as string) !== FieldType.dropdown) {
-        entity.type = FieldType.dropdown;
-      }
-      entity.options = this.normalizeDropdownOptions(entity.options);
-    }
+    this.normalizeType(entity);
     return super.create(entity, overrideParent);
   }
 
   override update(id: number, entity: CardAttribute, overrideParent?: boolean | undefined): Promise<CardAttribute> {
+    this.normalizeType(entity);
+    return super.update(id, entity, overrideParent);
+  }
+
+  override bulkCreate(entities: CardAttribute[]) {
+    entities.forEach(entity => this.normalizeType(entity));
+    return super.bulkCreate(entities);
+  }
+
+  private normalizeType(entity: CardAttribute) {
     const normalizedType = (entity.type as string)?.toLowerCase().trim();
     if (normalizedType === FieldType.dropdown || normalizedType === 'option') {
       if ((entity.type as string) !== FieldType.dropdown) {
@@ -176,7 +180,6 @@ export class CardAttributesService extends DecksChildService<CardAttribute, numb
       }
       entity.options = this.normalizeDropdownOptions(entity.options);
     }
-    return super.update(id, entity, overrideParent);
   }
 
   async createSystemAttributes(deckId: number) {

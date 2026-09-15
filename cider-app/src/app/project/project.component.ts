@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ElectronService } from '../data-services/electron/electron.service';
 import { DecksService } from '../data-services/services/decks.service';
 import { AssetsService } from '../data-services/services/assets.service';
@@ -43,6 +44,7 @@ interface Meter {
     standalone: false
 })
 export class ProjectComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   projectName: string = 'Cider Project';
   projectInfo: ProjectInfo | undefined;
   deckInfos: DeckInfo[] = [];
@@ -62,7 +64,7 @@ export class ProjectComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.translate.stream('welcome.title').subscribe(() => {
+    this.translate.stream('welcome.title').pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.getProjectInfo().then(info => {
         this.projectInfo = info;
         this.projectName = info.name;
@@ -129,16 +131,17 @@ export class ProjectComponent implements OnInit {
 
   private async getProjectInfo(): Promise<ProjectInfo> {
     const projectName = await this.getProjectName();
-    const assets = await this.assetsService.getAll()
+    // count assets without loading their file data
+    const assetCount = await this.assetsService.count();
     const documents = await this.documentsService.getAll();
     const decks = await this.decksService.getAll();
     const cards = await this.cardsService.getAllUnfiltered();
     const templates = await this.cardTemplatesService.getAllUnfiltered();
     const attributes = await this.attributesService.getAllUnfiltered();
-    
+
     return {
       name: projectName,
-      assetCount: assets.length,
+      assetCount: assetCount,
       documentCount: documents.length,
       deckCount: decks.length,
       cardCount: cards.length,
@@ -150,7 +153,7 @@ export class ProjectComponent implements OnInit {
   private async getDeckInfos(): Promise<DeckInfo[]> {
     const decks = await this.decksService.getAll();
     const deckInfos: DeckInfo[] = [];
-    
+
     for (const deck of decks) {
       const cards = await this.cardsService.getAll({ deckId: deck.id });
       const templates = await this.cardTemplatesService.getAll({ deckId: deck.id });
@@ -175,7 +178,7 @@ export class ProjectComponent implements OnInit {
           color: '#ffb74d'
         }
       ];
-      
+
       deckInfos.push({
         id: deck.id,
         name: deck.name,
@@ -185,7 +188,7 @@ export class ProjectComponent implements OnInit {
         meters: meters
       });
     }
-    
+
     return deckInfos;
   }
 

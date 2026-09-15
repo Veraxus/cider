@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { ConfirmationService, LazyLoadEvent, MenuItem, MessageService } from 'primeng/api';
 import { Table, TableLazyLoadEvent } from 'primeng/table';
 import { EntityField } from '../data-services/types/entity-field.type';
@@ -6,11 +6,12 @@ import { EntityService } from '../data-services/types/entity-service.type';
 import { FieldType } from '../data-services/types/field-type.type';
 import { SortDirection } from '../data-services/types/search-sort.type';
 import XlsxUtils from '../shared/utils/xlsx-utils';
-import { Subject, debounceTime } from 'rxjs';
+import { Subject, debounceTime, tap } from 'rxjs';
 import { TableStat, TokenStat } from './table-stat.type';
 import StringUtils from '../shared/utils/string-utils';
 import { TranslateService } from '@ngx-translate/core';
 import TranslateUtils from '../shared/utils/translate-utils';
+import { PendingSavesService } from '../data-services/services/pending-saves.service';
 
 @Component({
     selector: 'app-entity-table',
@@ -19,7 +20,7 @@ import TranslateUtils from '../shared/utils/translate-utils';
     providers: [MessageService, ConfirmationService],
     standalone: false
 })
-export class EntityTableComponent<Entity, Identifier extends string | number> implements OnInit {
+export class EntityTableComponent<Entity, Identifier extends string | number> implements OnInit, OnDestroy {
 
   @Input() records: Entity[] = [];
   @Input() columns: EntityField<Entity>[] = [];
@@ -51,13 +52,39 @@ export class EntityTableComponent<Entity, Identifier extends string | number> im
   contextMenuItems: MenuItem[] = [];
   shortcutsVisible: boolean = false;
   optionsCache: Map<EntityService<any, string | number>, any[]>;
+  private readonly pendingSaves = inject(PendingSavesService);
+  // every row edited within the save debounce, not only the last one
+  private pendingSaveEntities: Set<Entity> = new Set<Entity>();
+  private unregisterPendingSaves = this.pendingSaves.register(() => this.saveIfPending());
 
   constructor(private messageService: MessageService, 
     private confirmationService: ConfirmationService,
     private translate: TranslateService) {
-      this.saveSubject.asObservable().pipe(debounceTime(1000))
-        .subscribe((entity) => this.save(entity));
+      this.saveSubject.asObservable().pipe(
+        tap(entity => this.pendingSaveEntities.add(entity)),
+        debounceTime(1000)
+      ).subscribe(() => this.saveIfPending());
       this.optionsCache = new Map<EntityService<any, string | number>, any[]>();
+  }
+
+  ngOnDestroy(): void {
+    this.unregisterPendingSaves();
+    // write row edits from the last second instead of dropping them
+    this.pendingSaves.track(this.saveIfPending());
+  }
+
+  /**
+   * Save the rows edited since the last save
+   */
+  private saveIfPending(): Promise<unknown> {
+    const entities = Array.from(this.pendingSaveEntities);
+    this.pendingSaveEntities.clear();
+    const service = this.service;
+    if (!service || !this.saveToService) {
+      return Promise.resolve();
+    }
+    return Promise.all(entities.map(entity => service.update((<any>entity)[service.getIdField()], entity)
+      .catch(error => console.log('error saving entity', error))));
   }
 
   ngOnInit(): void {

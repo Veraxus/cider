@@ -1,12 +1,13 @@
-import { Component, OnDestroy, OnInit, signal, WritableSignal } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal, viewChild, WritableSignal } from '@angular/core';
 import { CardsService } from '../data-services/services/cards.service';
 import { CardAttributesService } from '../data-services/services/card-attributes.service';
 import { ThemeService } from '../data-services/theme/theme.service';
 import { DecksService } from '../data-services/services/decks.service';
+import { PendingSavesService } from '../data-services/services/pending-saves.service';
 import { SpreadsheetComponent, Cell, ColumnConfig, DropdownOption, SpreadsheetTheme, longLight, longDark, cosmicDark } from 'oatear-longtable';
 import { Card } from '../data-services/types/card.type';
 import { CardAttribute } from '../data-services/types/card-attribute.type';
-import { Subscription, Subject, debounceTime, firstValueFrom } from 'rxjs';
+import { Subscription, Subject, debounceTime, firstValueFrom, tap } from 'rxjs';
 import StringUtils from '../shared/utils/string-utils';
 import { FieldType } from '../data-services/types/field-type.type';
 import { ProgressBarModule } from 'primeng/progressbar';
@@ -33,22 +34,36 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     private cards: Card[] = [];
     private attributes: CardAttribute[] = [];
     private subscriptions: Subscription = new Subscription();
+    private spreadsheet = viewChild(SpreadsheetComponent);
 
     private dataChangeSubject = new Subject<Cell[][]>();
     private columnChangeSubject = new Subject<ColumnConfig[]>();
+    private dataChangePending = false;
+    private pendingColumnConfig: ColumnConfig[] | undefined;
+    // changes are written one after another so a flush never runs alongside a debounced save
+    private saveQueue: Promise<void> = Promise.resolve();
+    private unregisterPendingSaves: () => void;
 
     constructor(
         private cardsService: CardsService,
         private attributesService: CardAttributesService,
         private themeService: ThemeService,
-        private decksService: DecksService
+        private decksService: DecksService,
+        private pendingSaves: PendingSavesService
     ) {
         this.subscriptions.add(
-            this.dataChangeSubject.pipe(debounceTime(1000)).subscribe(data => this.processDataChange(data))
+            this.dataChangeSubject.pipe(
+                tap(() => this.dataChangePending = true),
+                debounceTime(1000)
+            ).subscribe(() => this.saveDataChange())
         );
         this.subscriptions.add(
-            this.columnChangeSubject.pipe(debounceTime(1000)).subscribe(config => this.processColumnChange(config))
+            this.columnChangeSubject.pipe(
+                tap(config => this.pendingColumnConfig = config),
+                debounceTime(1000)
+            ).subscribe(() => this.saveColumnChange())
         );
+        this.unregisterPendingSaves = this.pendingSaves.register(() => this.flushPendingChanges());
     }
 
     ngOnInit(): void {
@@ -58,6 +73,42 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
 
     ngOnDestroy(): void {
         this.subscriptions.unsubscribe();
+        this.unregisterPendingSaves();
+        // write edits from the last second instead of dropping them
+        this.pendingSaves.track(this.flushPendingChanges());
+    }
+
+    /**
+     * Save changes that are still waiting on the debounce, including a cell that is still being edited
+     */
+    private flushPendingChanges(): Promise<void> {
+        const spreadsheet = this.spreadsheet();
+        if (spreadsheet?.editingCell()) {
+            // saveEdit updates the data signal right away but emits onDataChange later
+            spreadsheet.saveEdit();
+            this.dataChangePending = true;
+        }
+        this.saveColumnChange();
+        return this.saveDataChange();
+    }
+
+    private saveDataChange(): Promise<void> {
+        if (this.dataChangePending) {
+            this.dataChangePending = false;
+            this.saveQueue = this.saveQueue.then(() => this.processDataChange(this.data()))
+                .catch(error => console.error('Error saving card changes', error));
+        }
+        return this.saveQueue;
+    }
+
+    private saveColumnChange(): Promise<void> {
+        const config = this.pendingColumnConfig;
+        if (config) {
+            this.pendingColumnConfig = undefined;
+            this.saveQueue = this.saveQueue.then(() => this.processColumnChange(config))
+                .catch(error => console.error('Error saving column changes', error));
+        }
+        return this.saveQueue;
     }
 
     private async loadData(): Promise<void> {

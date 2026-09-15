@@ -18,6 +18,9 @@ export class ProjectStateService {
     private dirtyEntities: BehaviorSubject<DirtyEntity[]> = new BehaviorSubject<DirtyEntity[]>([]);
     private isDirtyMap: Map<string, boolean> = new Map();
     private suspendTracking: boolean = false;
+    // read before the listeners clear the marker: only a marker left by a previous
+    // app session means the app closed unexpectedly
+    private crashRecoveryPath: string | null = localStorage.getItem(ProjectStateService.CRASH_RECOVERY_KEY);
 
     private currentHomeUrl: PersistentPath | undefined;
 
@@ -111,7 +114,11 @@ export class ProjectStateService {
     }
 
     public getCrashRecoveryPath(): string | null {
-        return localStorage.getItem(ProjectStateService.CRASH_RECOVERY_KEY);
+        return this.crashRecoveryPath;
+    }
+
+    public clearCrashRecoveryPath() {
+        this.crashRecoveryPath = null;
     }
 
     public async markAllDirty() {

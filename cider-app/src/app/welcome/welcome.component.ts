@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ConfirmationService } from 'primeng/api';
 import { firstValueFrom, Observable, take } from 'rxjs';
 import { LocalStorageService } from '../data-services/local-storage/local-storage.service';
@@ -27,6 +28,7 @@ export class WelcomeComponent implements OnInit {
   public loadingPercent: number = 0;
   public loadingInfo: string = '';
   public loadingHeader: string = '';
+  private readonly destroyRef = inject(DestroyRef);
   isElectron: boolean;
   projectHomeUrl$: Observable<PersistentPath | undefined>;
   projectUnsaved$: Observable<boolean>;
@@ -62,7 +64,7 @@ export class WelcomeComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.localStorageService.getRecentProjectUrls().subscribe(urls => {
+    this.localStorageService.getRecentProjectUrls().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(urls => {
       this.recentProjectUrls = urls.map(url => this.urlToProjectInfo(url));
     });
     // uncomment to test recent projects

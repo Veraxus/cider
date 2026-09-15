@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AssetsService } from '../data-services/services/assets.service';
 import { ActivatedRoute } from '@angular/router';
 import { Asset } from '../data-services/types/asset.type';
@@ -64,7 +65,7 @@ export class AssetComponent {
     combineLatest({
       assetUrls: this.assetsService.getAssetUrls(),
       routeParams: this.route.paramMap
-    }).subscribe(({ assetUrls, routeParams }) => {
+    }).pipe(takeUntilDestroyed()).subscribe(({ assetUrls, routeParams }) => {
       const assetIdString = routeParams.get('assetId') || '';
       const assetId = parseInt(assetIdString, 10);
       this.assetUrls = assetUrls;
