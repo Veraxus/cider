@@ -205,6 +205,11 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     this.localStorage.setPreviewSettings(this.previewSettings);
   }
 
+  public closeCardData() {
+    this.previewSettings.cardDataColumnEnabled = false;
+    this.saveSettings();
+  }
+
   public getTrimOffsetPx(): number {
     return this.convertToPx(this.previewSettings.trimOffset, this.previewSettings.trimUnit);
   }

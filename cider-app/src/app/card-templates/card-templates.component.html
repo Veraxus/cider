@@ -12,7 +12,11 @@
           </ng-template>
           <ng-template pTemplate>
             <p-card class="card-data-column" styleClass="card-data-card">
-              <div class="card-data-title">{{ 'template-editor.card-data-title' | translate }}</div>
+              <div class="card-data-title">
+                <span>{{ 'template-editor.card-data-title' | translate }}</span>
+                <button pButton type="button" icon="pi pi-times" class="p-button-text p-button-rounded card-data-close"
+                  (click)="closeCardData()" [pTooltip]="'controls.close' | translate"></button>
+              </div>
               <div class="card-data-scroll">
                 @if (selectedCard.id) {
                 <app-card-data-editor [card]="selectedCard" (cardEdited)="onCardEdited($event)"></app-card-data-editor>

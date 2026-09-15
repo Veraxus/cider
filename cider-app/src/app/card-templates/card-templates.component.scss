@@ -119,6 +119,9 @@ textarea {
             display: flex;
             flex-direction: row;
             gap: 10px;
+            // every gutter has 10px on both sides, like the gutter between the code editors
+            padding-right: 10px;
+            box-sizing: border-box;
 
             // preview on the left, card data on the right, with a resizable gutter between
             .preview-splitter {
@@ -151,8 +154,14 @@ textarea {
                     margin-bottom: 10px;
                     display: flex;
                     align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
                     font-weight: 600;
                     font-size: 1.1rem;
+
+                    .card-data-close {
+                        flex-shrink: 0;
+                    }
                 }
 
                 .card-data-scroll {
@@ -170,6 +179,9 @@ textarea {
             .page-card {
                 height: 100%;
                 overflow: hidden;
+                // the site-wide page card margin made the preview shorter than the other panels
+                // and put extra space on one side of its gutter
+                margin: 0;
 
                 .preview-controls {
                     width: 100%;
