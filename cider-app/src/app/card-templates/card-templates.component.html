@@ -66,6 +66,12 @@
       <p-select [options]="cardOptions" [ngModel]="selectedCard" (ngModelChange)="selectCard($event)" [filter]="true" filterBy="name" optionLabel="name"
         optionValue="card" class="card-dropdown"></p-select>
       <p-buttongroup>
+        <button pButton type="button" icon="pi pi-chevron-left" (click)="selectAdjacentCard(-1)"
+          [disabled]="cards.length < 2" [pTooltip]="'template-editor.previous-card' | translate"></button>
+        <button pButton type="button" icon="pi pi-chevron-right" (click)="selectAdjacentCard(1)"
+          [disabled]="cards.length < 2" [pTooltip]="'template-editor.next-card' | translate"></button>
+      </p-buttongroup>
+      <p-buttongroup>
         <button pButton type="button" icon="pi pi-search-minus" (click)="changeZoom(ZOOM_DOWN)"
           [pTooltip]="'controls.zoom-out' | translate"></button>
         <button pButton type="button" class="zoom-level-button" (click)="resetZoomAndPan()"

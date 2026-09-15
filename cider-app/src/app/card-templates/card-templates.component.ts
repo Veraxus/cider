@@ -242,21 +242,29 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   /**
-   * Ctrl+Left / Ctrl+Right select the previous / next card, wrapping around at either end
+   * Alt+Comma / Alt+Period (the < and > keys) select the previous / next card. They also work
+   * while typing, since the code editors and text fields do not use them.
    */
   @HostListener('window:keydown', ['$event'])
   public onCardShortcut(event: KeyboardEvent) {
-    if (!event.ctrlKey || event.altKey || event.shiftKey || event.metaKey
-      || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) {
-      return;
-    }
-    // in text fields and the code editors Ctrl+Arrow moves the cursor by word
-    const target = event.target as HTMLElement | null;
-    if (this.cards.length === 0 || target?.closest('input, textarea, [contenteditable="true"], .monaco-editor')) {
+    // match the physical key, which stays the same across keyboard layouts and on macOS,
+    // where Option changes the typed character; fall back to the character if there is no key code
+    const key = event.code || event.key;
+    const step = (key === 'Period' || key === '.') ? 1 : (key === 'Comma' || key === ',') ? -1 : 0;
+    if (!step || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
     }
     event.preventDefault();
-    const step = event.key === 'ArrowRight' ? 1 : -1;
+    this.selectAdjacentCard(step);
+  }
+
+  /**
+   * Select the card before (-1) or after (1) the selected card, wrapping around at either end
+   */
+  public selectAdjacentCard(step: number) {
+    if (this.cards.length === 0) {
+      return;
+    }
     const index = this.cards.findIndex(card => card.id === this.selectedCard.id);
     const nextIndex = index === -1
       ? (step > 0 ? 0 : this.cards.length - 1)

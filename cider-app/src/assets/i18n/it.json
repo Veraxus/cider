@@ -176,7 +176,9 @@
         "offset-from-edge": "Offset From Edge",
         "show-card-data": "Show Card Data Column",
         "card-data-title": "Card Data",
-        "no-card-selected": "No card selected"
+        "no-card-selected": "No card selected",
+        "previous-card": "Previous card (Alt+,)",
+        "next-card": "Next card (Alt+.)"
     },
     "spreadsheet": {
         "loading": "Loading cards...",

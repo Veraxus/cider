@@ -175,7 +175,9 @@
         "offset-from-edge": "От отместване от ръба",
         "show-card-data": "Показване на колона с данни за картата",
         "card-data-title": "Данни за картата",
-        "no-card-selected": "Няма избрана карта"
+        "no-card-selected": "Няма избрана карта",
+        "previous-card": "Предишна карта (Alt+,)",
+        "next-card": "Следваща карта (Alt+.)"
     },
     "spreadsheet": {
         "loading": "Зареждане на картите...",
