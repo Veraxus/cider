@@ -241,6 +241,29 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     this.cardChanges.next(card);
   }
 
+  /**
+   * Ctrl+Left / Ctrl+Right select the previous / next card, wrapping around at either end
+   */
+  @HostListener('window:keydown', ['$event'])
+  public onCardShortcut(event: KeyboardEvent) {
+    if (!event.ctrlKey || event.altKey || event.shiftKey || event.metaKey
+      || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) {
+      return;
+    }
+    // in text fields and the code editors Ctrl+Arrow moves the cursor by word
+    const target = event.target as HTMLElement | null;
+    if (this.cards.length === 0 || target?.closest('input, textarea, [contenteditable="true"], .monaco-editor')) {
+      return;
+    }
+    event.preventDefault();
+    const step = event.key === 'ArrowRight' ? 1 : -1;
+    const index = this.cards.findIndex(card => card.id === this.selectedCard.id);
+    const nextIndex = index === -1
+      ? (step > 0 ? 0 : this.cards.length - 1)
+      : (index + step + this.cards.length) % this.cards.length;
+    this.selectCard(this.cards[nextIndex]);
+  }
+
   public selectCard(card: Card) {
     this.selectedCard = card;
     // keep the selected card in the url without navigating, so reloading the project returns to it
