@@ -38,12 +38,13 @@ function createWindow(): BrowserWindow {
     }
   });
 
+  let appUrl: string;
   if (serve) {
     const debug = require('electron-debug');
     debug();
 
     require('electron-reloader')(module);
-    win.loadURL('http://localhost:4200');
+    appUrl = 'http://localhost:4200';
   } else {
     // Path when running electron executable
     let pathIndex = './index.html';
@@ -54,12 +55,45 @@ function createWindow(): BrowserWindow {
     }
 
     const url = new URL(path.join('file:', __dirname, pathIndex));
-    win.loadURL(url.href);
+    appUrl = url.href;
   }
+  win.loadURL(appUrl);
+
+  // Ctrl+R (Cmd+R on macOS) reloads the project from disk instead of the page. Reloading the
+  // page on an app route (e.g. .../decks/1/cards) finds no file and leaves a blank window.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.meta) && input.key.toLowerCase() === 'r') {
+      event.preventDefault();
+      win.webContents.send('reload-project-requested');
+    }
+  });
+
+  // If the page is reloaded some other way (e.g. a menu item), load the app from its start page
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    const aborted = errorCode === -3;
+    if (isMainFrame && !aborted && validatedURL !== appUrl) {
+      win.loadURL(appUrl);
+    }
+  });
+
+  // The app can only answer close requests after it has loaded
+  let rendererReady = false;
+  win.webContents.ipc.on('renderer-ready', () => {
+    rendererReady = true;
+  });
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      rendererReady = false;
+    }
+  });
+  win.webContents.on('render-process-gone', () => {
+    rendererReady = false;
+  });
 
   // Emitted when the window is closed.
   win.on('close', (event) => {
-    if (!shouldClose) {
+    // a blank or crashed page cannot answer, so close right away instead of keeping the window open
+    if (!shouldClose && rendererReady) {
       win.webContents.send('app-closed');
       event.preventDefault();
     }

@@ -41,6 +41,10 @@ export class ElectronService {
       this.getIpcRenderer().on('app-closed', () => {
         this.appClosed.next(null);
       });
+      // Ctrl+R (Cmd+R on macOS); the main process sends this instead of reloading the page
+      this.getIpcRenderer().on('reload-project-requested', () => {
+        this.reloadProjectRequested.next(null);
+      });
       // File Watcher Events
       this.getIpcRenderer().on('file-added', (event, path) => {
         if (!this.isSaving) this.fileAdded.next(path);
@@ -66,12 +70,23 @@ export class ElectronService {
   private fileRemoved: Subject<string> = new Subject<string>();
   private directoryAdded: Subject<string> = new Subject<string>();
   private directoryRemoved: Subject<string> = new Subject<string>();
+  private reloadProjectRequested: Subject<null> = new Subject<null>();
 
   public getFileAdded() { return this.fileAdded.asObservable(); }
   public getFileChanged() { return this.fileChanged.asObservable(); }
   public getFileRemoved() { return this.fileRemoved.asObservable(); }
   public getDirectoryAdded() { return this.directoryAdded.asObservable(); }
   public getDirectoryRemoved() { return this.directoryRemoved.asObservable(); }
+  public getReloadProjectRequested() { return this.reloadProjectRequested.asObservable(); }
+
+  /**
+   * Tell the main process that the app has loaded and can answer close requests
+   */
+  public notifyRendererReady() {
+    if (this.isElectron()) {
+      this.getIpcRenderer().send('renderer-ready');
+    }
+  }
 
   public async watchDirectory(persistentPath: PersistentPath): Promise<boolean> {
     if (!this.isElectron()) return false;

@@ -80,6 +80,18 @@ export class SiteMenuComponent implements OnInit {
         this.exitCider();
       });
     });
+    // Ctrl+R (Cmd+R on macOS) reloads the project from disk
+    this.electronService.getReloadProjectRequested().subscribe(() => {
+      this.ngZone.run(async () => {
+        const projectHomeUrl = await firstValueFrom(this.electronService.getProjectHomeUrl());
+        // nothing to reload without an open project, and never while a load or save is running
+        if (projectHomeUrl && !this.displayLoading) {
+          this.reloadProjectProcedure();
+        }
+      });
+    });
+    // the close request above can now be answered
+    this.electronService.notifyRendererReady();
     this.items = [];
     this.selectedDeck$ = this.decksService.getSelectedDeck();
     this.recentProjectUrls$ = this.localStorageService.getRecentProjectUrls();
