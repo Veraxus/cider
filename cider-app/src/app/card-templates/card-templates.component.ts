@@ -59,7 +59,21 @@ const templateHtmlFront =
     standalone: false
 })
 export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('previewSpace') previewSpace!: ElementRef;
+  previewSpace?: ElementRef;
+  // the preview space is re-created when panels resize or the card data panel is toggled,
+  // so watch whichever element is current
+  @ViewChild('previewSpace') set previewSpaceElement(element: ElementRef | undefined) {
+    this.previewSpace = element;
+    this.resizeObserver?.disconnect();
+    if (element) {
+      this.resizeObserver = new ResizeObserver(() => {
+        if (!this.disablePanels) {
+          this.centerPreview();
+        }
+      });
+      this.resizeObserver.observe(element.nativeElement);
+    }
+  }
   static readonly DEFAULT_HTML: string = templateHtmlFront;
   static readonly DEFAULT_CSS: string = templateCssFront;
   // have to be non-static
@@ -208,15 +222,6 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
 
   ngAfterViewInit(): void {
     setTimeout(() => this.centerPreview(), 500);
-
-    if (this.previewSpace) {
-      this.resizeObserver = new ResizeObserver(() => {
-        if (!this.disablePanels) {
-          this.centerPreview();
-        }
-      });
-      this.resizeObserver.observe(this.previewSpace.nativeElement);
-    }
   }
 
   ngOnDestroy(): void {

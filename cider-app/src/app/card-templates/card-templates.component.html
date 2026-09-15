@@ -5,56 +5,27 @@
     <ng-template pTemplate>
       <div class="left-panel p-col p-flex p-align-items-center p-justify-content-center">
         @if (previewSettings.cardDataColumnEnabled) {
-        <p-card class="card-data-column" styleClass="card-data-card">
-          <div class="card-data-title">{{ 'template-editor.card-data-title' | translate }}</div>
-          <div class="card-data-scroll">
-            @if (selectedCard.id) {
-            <app-card-data-editor [card]="selectedCard" (cardEdited)="onCardEdited($event)"></app-card-data-editor>
-            } @else {
-            <div class="card-data-empty">{{ 'template-editor.no-card-selected' | translate }}</div>
-            }
-          </div>
-        </p-card>
-        }
-        <p-card class="preview-column" styleClass="page-card">
-          @if (!disablePanels) {
-          <div class="preview-controls">
-            <p-select [options]="cardOptions" [ngModel]="selectedCard" (ngModelChange)="selectCard($event)" [filter]="true" filterBy="name" optionLabel="name"
-              optionValue="card" class="card-dropdown"></p-select>
-            <p-buttongroup>
-              <button pButton type="button" icon="pi pi-search-minus" (click)="changeZoom(ZOOM_DOWN)"
-                [pTooltip]="'controls.zoom-out' | translate"></button>
-              <button pButton type="button" class="zoom-level-button" (click)="resetZoomAndPan()"
-                [pTooltip]="'controls.reset-view' | translate">{{(zoom * 100).toFixed(0)}}%</button>
-              <button pButton type="button" icon="pi pi-search-plus" (click)="changeZoom(ZOOM_UP)"
-                [pTooltip]="'controls.zoom-in' | translate"></button>
-            </p-buttongroup>
-            <button pButton type="button" icon="pi pi-cog" class="settings-button p-ml-2"
-              (click)="settingsVisible = true" [pTooltip]="'controls.preview-settings' | translate"></button>
-          </div>
-          }
-          @if (!disablePanels) {
-          <div #previewSpace class="preview-space" [class.panning]="isPanning"
-            (mousedown)="onMouseDown($event, previewSpace)" (mousemove)="onMouseMove($event, previewSpace)"
-            (mouseup)="onMouseUp($event)" (mouseleave)="onMouseLeave($event)" (wheel)="onWheel($event)">
-            <div class="zoom-container" [style.transform]="'scale(' + zoom + ')'">
-              <div class="grid-container">
-                <div class="grid-background">
-                  <div class="grid-lines"></div>
-                  <div class="grid-axis-x"></div>
-                  <div class="grid-axis-y"></div>
-                </div>
-                @if (selectedCard) {
-                <app-card-preview [card]="selectedCard" [template]="selectedTemplate" [scale]="1.0" [cache]="false"
-                  [tiltable]="previewSettings.tiltEnabled" [showTrimLines]="previewSettings.trimLinesEnabled"
-                  [trimOffsetPx]="getTrimOffsetPx()" [showSafeLines]="previewSettings.safeLinesEnabled"
-                  [safeOffsetPx]="getSafeOffsetPx()" [version]="templateVersion"></app-card-preview>
+        <p-splitter class="preview-splitter" [panelSizes]="[60, 40]" [minSizes]="[25, 20]"
+          (onResizeStart)="onResizeStart($event)" (onResizeEnd)="onResizeEnd($event)">
+          <ng-template pTemplate>
+            <ng-container *ngTemplateOutlet="previewCard"></ng-container>
+          </ng-template>
+          <ng-template pTemplate>
+            <p-card class="card-data-column" styleClass="card-data-card">
+              <div class="card-data-title">{{ 'template-editor.card-data-title' | translate }}</div>
+              <div class="card-data-scroll">
+                @if (selectedCard.id) {
+                <app-card-data-editor [card]="selectedCard" (cardEdited)="onCardEdited($event)"></app-card-data-editor>
+                } @else {
+                <div class="card-data-empty">{{ 'template-editor.no-card-selected' | translate }}</div>
                 }
               </div>
-            </div>
-          </div>
-          }
-        </p-card>
+            </p-card>
+          </ng-template>
+        </p-splitter>
+        } @else {
+        <ng-container *ngTemplateOutlet="previewCard"></ng-container>
+        }
       </div>
     </ng-template>
     <ng-template pTemplate>
@@ -86,6 +57,50 @@
     </ng-template>
   </p-splitter>
 </div>
+
+<!-- card preview, shown on its own or next to the card data panel -->
+<ng-template #previewCard>
+  <p-card class="preview-column" styleClass="page-card">
+    @if (!disablePanels) {
+    <div class="preview-controls">
+      <p-select [options]="cardOptions" [ngModel]="selectedCard" (ngModelChange)="selectCard($event)" [filter]="true" filterBy="name" optionLabel="name"
+        optionValue="card" class="card-dropdown"></p-select>
+      <p-buttongroup>
+        <button pButton type="button" icon="pi pi-search-minus" (click)="changeZoom(ZOOM_DOWN)"
+          [pTooltip]="'controls.zoom-out' | translate"></button>
+        <button pButton type="button" class="zoom-level-button" (click)="resetZoomAndPan()"
+          [pTooltip]="'controls.reset-view' | translate">{{(zoom * 100).toFixed(0)}}%</button>
+        <button pButton type="button" icon="pi pi-search-plus" (click)="changeZoom(ZOOM_UP)"
+          [pTooltip]="'controls.zoom-in' | translate"></button>
+      </p-buttongroup>
+      <button pButton type="button" icon="pi pi-cog" class="settings-button p-ml-2"
+        (click)="settingsVisible = true" [pTooltip]="'controls.preview-settings' | translate"></button>
+    </div>
+    }
+    @if (!disablePanels) {
+    <div #previewSpace class="preview-space" [class.panning]="isPanning"
+      (mousedown)="onMouseDown($event, previewSpace)" (mousemove)="onMouseMove($event, previewSpace)"
+      (mouseup)="onMouseUp($event)" (mouseleave)="onMouseLeave($event)" (wheel)="onWheel($event)">
+      <div class="zoom-container" [style.transform]="'scale(' + zoom + ')'">
+        <div class="grid-container">
+          <div class="grid-background">
+            <div class="grid-lines"></div>
+            <div class="grid-axis-x"></div>
+            <div class="grid-axis-y"></div>
+          </div>
+          @if (selectedCard) {
+          <app-card-preview [card]="selectedCard" [template]="selectedTemplate" [scale]="1.0" [cache]="false"
+            [tiltable]="previewSettings.tiltEnabled" [showTrimLines]="previewSettings.trimLinesEnabled"
+            [trimOffsetPx]="getTrimOffsetPx()" [showSafeLines]="previewSettings.safeLinesEnabled"
+            [safeOffsetPx]="getSafeOffsetPx()" [version]="templateVersion"></app-card-preview>
+          }
+        </div>
+      </div>
+    </div>
+    }
+  </p-card>
+</ng-template>
+
 <app-entity-dialog [service]="service" [(visible)]="dialogVisible" [entity]="editTemplate"
   (onCreate)="updateTemplatesList()"></app-entity-dialog>
 <p-confirmDialog [style]="{width: '450px'}"></p-confirmDialog>

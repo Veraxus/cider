@@ -6,10 +6,10 @@ import { CardTemplatesService } from '../data-services/services/card-templates.s
 import { Action } from 'rxjs/internal/scheduler/Action';
 import { CardAttributesService } from '../data-services/services/card-attributes.service';
 import { ElectronService } from '../data-services/electron/electron.service';
-import { combineLatest, debounceTime, firstValueFrom, lastValueFrom, merge, timeout } from 'rxjs';
+import { combineLatest, debounceTime, filter, firstValueFrom, lastValueFrom, merge, timeout } from 'rxjs';
 import StringUtils from '../shared/utils/string-utils';
 import { TreeNodeContextMenuSelectEvent, TreeNodeSelectEvent, TreeNodeDropEvent } from 'primeng/tree';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 import { EntityService } from '../data-services/types/entity-service.type';
 import { DocumentsService } from '../data-services/services/documents.service';
 import { HttpClient } from '@angular/common/http';
@@ -28,7 +28,15 @@ import { Asset } from '../data-services/types/asset.type';
 })
 export class SiteSidebarComponent implements OnInit {
   deckId: number = 0;
-  files: TreeNode[] = [];
+  private _files: TreeNode[] = [];
+  // rebuilding the tree creates new nodes, so select the current page's node again
+  get files(): TreeNode[] {
+    return this._files;
+  }
+  set files(files: TreeNode[]) {
+    this._files = files;
+    this.selectCurrentRouteNode();
+  }
   selectedFile: TreeNode | null = null;
   menuItems: MenuItem[] = [];
   updatingFiles: boolean = false;
@@ -56,8 +64,38 @@ export class SiteSidebarComponent implements OnInit {
     this.service = {} as EntityService<any, any>;
   }
 
+  /**
+   * Select the node of the page that is open, or clear the selection if the page has no node
+   */
+  private selectCurrentRouteNode() {
+    let path = this.router.url.split(/[?#]/)[0];
+    // /decks/:deckId shows the same cards page as the deck's node
+    if (/^\/decks\/\d+$/.test(path)) {
+      path += '/cards';
+    }
+    this.selectedFile = this.findNodeByUrl(this._files, path) ?? null;
+  }
+
+  private findNodeByUrl(nodes: TreeNode[], url: string): TreeNode | undefined {
+    for (const node of nodes) {
+      if (node.data?.url === url) {
+        return node;
+      }
+      const match = node.children ? this.findNodeByUrl(node.children, url) : undefined;
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+
   ngOnInit() {
     console.log('init sidebar');
+
+    // highlight the current page's node, including pages opened from outside the sidebar
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd)).subscribe(() => {
+      this.selectCurrentRouteNode();
+    });
 
     // update menu on language change
     this.translate.stream('welcome.title').subscribe(() => {
@@ -329,7 +367,8 @@ export class SiteSidebarComponent implements OnInit {
                 droppable: false
               })
             }
-            ));
+            // template nodes arrive after the tree is set, so select the current page's node again
+            )).then(() => this.selectCurrentRouteNode());
 
           let deckFile = {
             label: deck.name,

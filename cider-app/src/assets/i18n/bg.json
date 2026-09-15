@@ -176,5 +176,10 @@
         "show-card-data": "Показване на колона с данни за картата",
         "card-data-title": "Данни за картата",
         "no-card-selected": "Няма избрана карта"
+    },
+    "spreadsheet": {
+        "loading": "Зареждане на картите...",
+        "view-front-template": "Преглед с лицевия шаблон",
+        "view-back-template": "Преглед със задния шаблон"
     }
 }

@@ -1,4 +1,5 @@
-import { Component, OnDestroy, OnInit, signal, viewChild, WritableSignal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, inject, signal, viewChild, WritableSignal } from '@angular/core';
+import { Router } from '@angular/router';
 import { CardsService } from '../data-services/services/cards.service';
 import { CardAttributesService } from '../data-services/services/card-attributes.service';
 import { ThemeService } from '../data-services/theme/theme.service';
@@ -11,7 +12,9 @@ import { Subscription, Subject, debounceTime, firstValueFrom, tap } from 'rxjs';
 import StringUtils from '../shared/utils/string-utils';
 import { FieldType } from '../data-services/types/field-type.type';
 import { ProgressBarModule } from 'primeng/progressbar';
-import { TranslateModule } from '@ngx-translate/core';
+import { ContextMenu, ContextMenuModule } from 'primeng/contextmenu';
+import { MenuItem } from 'primeng/api';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -19,13 +22,14 @@ import { CommonModule } from '@angular/common';
     templateUrl: './entity-spreadsheet.component.html',
     styleUrls: ['./entity-spreadsheet.component.scss'],
     standalone: true,
-    imports: [SpreadsheetComponent, ProgressBarModule, TranslateModule, CommonModule]
+    imports: [SpreadsheetComponent, ProgressBarModule, TranslateModule, CommonModule, ContextMenuModule]
 })
 export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     data: WritableSignal<Cell[][]> = signal([]);
     columnConfig: WritableSignal<ColumnConfig[]> = signal([]);
     theme: WritableSignal<SpreadsheetTheme> = signal(longLight);
     isLoading: WritableSignal<boolean> = signal(false);
+    rowMenuItems: MenuItem[] = [];
 
     private lookups: Map<string, Map<string, number>> = new Map(); // Name -> ID
     private reverseLookups: Map<string, Map<number, string>> = new Map(); // ID -> Name
@@ -35,6 +39,10 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     private attributes: CardAttribute[] = [];
     private subscriptions: Subscription = new Subscription();
     private spreadsheet = viewChild(SpreadsheetComponent);
+    private rowMenu = viewChild<ContextMenu>('rowMenu');
+    private readonly router = inject(Router);
+    private readonly translate = inject(TranslateService);
+    private readonly hostElement: HTMLElement = inject(ElementRef).nativeElement;
 
     private dataChangeSubject = new Subject<Cell[][]>();
     private columnChangeSubject = new Subject<ColumnConfig[]>();
@@ -64,6 +72,8 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
             ).subscribe(() => this.saveColumnChange())
         );
         this.unregisterPendingSaves = this.pendingSaves.register(() => this.flushPendingChanges());
+        // capture phase, so this runs before the spreadsheet's own right-click handlers
+        this.hostElement.addEventListener('contextmenu', this.onRowContextMenu, true);
     }
 
     ngOnInit(): void {
@@ -72,10 +82,87 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
+        this.hostElement.removeEventListener('contextmenu', this.onRowContextMenu, true);
         this.subscriptions.unsubscribe();
         this.unregisterPendingSaves();
         // write edits from the last second instead of dropping them
         this.pendingSaves.track(this.flushPendingChanges());
+    }
+
+    /**
+     * Replaces the spreadsheet's right-click menu on cells and row numbers with one that can also
+     * open the row's card templates. Column header menus are left to the spreadsheet.
+     */
+    private onRowContextMenu = (event: MouseEvent) => {
+        const spreadsheet = this.spreadsheet();
+        const target = event.target as HTMLElement;
+        const cell = target.closest<HTMLElement>('td[data-row]');
+        const rowHeader = target.closest<HTMLElement>('th[data-row-index]');
+        if (!spreadsheet || (!cell && !rowHeader)) {
+            return;
+        }
+        event.stopPropagation();
+
+        // let the spreadsheet select the row as it does for its own menu, then close its menu
+        let modelRow: number;
+        if (cell) {
+            modelRow = Number(cell.dataset['row']);
+            spreadsheet.onCellContextMenu(event, modelRow, Number(cell.dataset['col']));
+        } else {
+            const visualRow = Number(rowHeader!.dataset['rowIndex']);
+            modelRow = spreadsheet.displayedRows()[visualRow].originalModelIndex;
+            spreadsheet.onRowContextMenu(event, visualRow);
+        }
+        spreadsheet.closeContextMenu();
+        this.openRowMenu(event, modelRow);
+    };
+
+    private async openRowMenu(event: MouseEvent, modelRow: number) {
+        const spreadsheet = this.spreadsheet();
+        if (!spreadsheet) {
+            return;
+        }
+        // save pending edits first so the row matches its saved card and template values
+        await this.flushPendingChanges();
+        const card = this.cardForRow(modelRow);
+        const menuData = spreadsheet.contextMenuData();
+        const spreadsheetAction = (action: string) => () => spreadsheet.handleContextMenuAction(action);
+
+        this.rowMenuItems = [
+            {
+                label: this.translate.instant('spreadsheet.view-front-template'),
+                icon: 'pi pi-id-card',
+                disabled: !card?.id || typeof card.frontCardTemplateId !== 'number',
+                command: () => this.openTemplate(card!, card!.frontCardTemplateId)
+            },
+            {
+                label: this.translate.instant('spreadsheet.view-back-template'),
+                icon: 'pi pi-id-card',
+                disabled: !card?.id || typeof card.backCardTemplateId !== 'number',
+                command: () => this.openTemplate(card!, card!.backCardTemplateId)
+            },
+            { separator: true },
+            { label: menuData.insertRowsAboveText, icon: 'pi pi-arrow-up', command: spreadsheetAction('insertRowAbove') },
+            { label: menuData.insertRowsBelowText, icon: 'pi pi-arrow-down', command: spreadsheetAction('insertRowBelow') },
+            { separator: true },
+            { label: menuData.deleteRowText, icon: 'pi pi-trash', disabled: !menuData.canDeleteRows, command: spreadsheetAction('deleteRows') },
+            { separator: true },
+            { label: 'Copy', icon: 'pi pi-copy', command: spreadsheetAction('copy') },
+            { label: 'Paste', icon: 'pi pi-clipboard', command: spreadsheetAction('paste') }
+        ];
+        this.rowMenu()?.show(event);
+    }
+
+    /**
+     * The saved card for a spreadsheet row, matched the same way processDataChange matches rows
+     */
+    private cardForRow(modelRow: number): Card | undefined {
+        const recordId = (this.data()[modelRow] as any)?.recordId;
+        return recordId !== undefined ? this.cards.find(card => card.id === recordId) : this.cards[modelRow];
+    }
+
+    private openTemplate(card: Card, templateId: number) {
+        this.router.navigate(['/decks', card.deckId, 'templates', templateId], { queryParams: { cardId: card.id } });
     }
 
     /**

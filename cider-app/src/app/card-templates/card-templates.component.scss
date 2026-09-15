@@ -120,9 +120,21 @@ textarea {
             flex-direction: row;
             gap: 10px;
 
-            .card-data-column {
-                flex: 0 0 280px;
+            // preview on the left, card data on the right, with a resizable gutter between
+            .preview-splitter {
+                flex: 1;
                 min-width: 0;
+                height: 100%;
+
+                >.p-splitter {
+                    height: 100%;
+                    width: 100%;
+                }
+
+                .p-splitter-gutter {
+                    margin-left: 10px;
+                    margin-right: 10px;
+                }
             }
 
             .preview-column {

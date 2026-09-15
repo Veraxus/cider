@@ -177,5 +177,10 @@
         "show-card-data": "Mostrar columna de datos de la carta",
         "card-data-title": "Datos de la carta",
         "no-card-selected": "Ninguna carta seleccionada"
+    },
+    "spreadsheet": {
+        "loading": "Cargando cartas...",
+        "view-front-template": "Ver con la plantilla frontal",
+        "view-back-template": "Ver con la plantilla trasera"
     }
 }

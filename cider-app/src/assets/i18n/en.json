@@ -220,5 +220,10 @@
         "show-card-data": "Show Card Data Column",
         "card-data-title": "Card Data",
         "no-card-selected": "No card selected"
+    },
+    "spreadsheet": {
+        "loading": "Loading cards...",
+        "view-front-template": "View with Front Template",
+        "view-back-template": "View with Back Template"
     }
 }
