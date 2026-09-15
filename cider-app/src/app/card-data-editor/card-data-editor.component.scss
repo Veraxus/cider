@@ -1,0 +1,35 @@
+:host {
+    display: block;
+}
+
+.card-data-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.card-data-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--p-text-color);
+    }
+
+    textarea {
+        width: 100%;
+        resize: none;
+    }
+
+    p-select,
+    p-inputnumber {
+        width: 100%;
+    }
+
+    ::ng-deep p-inputnumber .p-inputnumber-input {
+        width: 100%;
+    }
+}

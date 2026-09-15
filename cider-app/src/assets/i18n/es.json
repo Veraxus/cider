@@ -173,6 +173,9 @@
         "enable-tilt": "Habilitar inclinación dinámica",
         "show-trim-lines": "Mostrar líneas de corte",
         "show-safe-lines": "Mostrar líneas de área segura",
-        "offset-from-edge": "Desplazamiento desde el borde"
+        "offset-from-edge": "Desplazamiento desde el borde",
+        "show-card-data": "Mostrar columna de datos de la carta",
+        "card-data-title": "Datos de la carta",
+        "no-card-selected": "Ninguna carta seleccionada"
     }
 }

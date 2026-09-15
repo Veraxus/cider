@@ -213,7 +213,8 @@ export class SiteMenuComponent implements OnInit {
   private async updateBreadcrumbs(routeUrl: string) {
     this.home = { icon: 'pi pi-home', routerLink: '/project' };
     const breadcrumbs: MenuItem[] = [];
-    const urlSegments = routeUrl.split('/').filter((segment) => segment);
+    // ignore query params and fragments (e.g. ?cardId=) when building breadcrumbs
+    const urlSegments = routeUrl.split(/[?#]/)[0].split('/').filter((segment) => segment);
     let currentPath = '';
 
     for (let i = 0; i < urlSegments.length; i++) {

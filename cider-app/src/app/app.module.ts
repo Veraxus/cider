@@ -104,6 +104,7 @@ import { ProjectComponent } from './project/project.component';
 import { GameSimulatorComponent } from './game-simulator/game-simulator.component';
 import { HandlebarsPipe } from './shared/pipes/handlebars.pipe';
 import { EntitySpreadsheetComponent } from './entity-spreadsheet/entity-spreadsheet.component';
+import { CardDataEditorComponent } from './card-data-editor/card-data-editor.component';
 
 import { DropdownOptionEditorComponent } from './shared/components/dropdown-option-editor/dropdown-option-editor.component';
 
@@ -122,6 +123,7 @@ import { DropdownOptionEditorComponent } from './shared/components/dropdown-opti
         EntityTableComponent,
         EntityDialogComponent,
         CardPreviewComponent,
+        CardDataEditorComponent,
         ExportCardsComponent,
         CardsTabMenuComponent,
         CardAttributesComponent,

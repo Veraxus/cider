@@ -1,0 +1,34 @@
+@if (card) {
+<div class="card-data-fields">
+  @for (field of fields; track field.field) {
+  <div class="card-data-field">
+    <label [for]="'card-data-' + $any(field.field)" [title]="field.description || ''">{{field.header}}</label>
+    @if (field.service) {
+    <p-select [options]="(field.service | entityList | async) || []" [ngModel]="getValue(field)"
+      (ngModelChange)="setValue(field, $event)" [inputId]="'card-data-' + $any(field.field)" optionLabel="name"
+      [optionValue]="field.service.getIdField()" appendTo="body"></p-select>
+    } @else {
+    @switch (field.type) {
+    @case (FieldType.dropdown) {
+    <p-select [options]="field.options || []" [ngModel]="getValue(field)" (ngModelChange)="setValue(field, $event)"
+      [inputId]="'card-data-' + $any(field.field)" optionLabel="value" optionValue="value" appendTo="body"></p-select>
+    }
+    @case (FieldType.numeric) {
+    <p-inputNumber [ngModel]="getValue(field)" (ngModelChange)="setValue(field, $event)"
+      [inputId]="'card-data-' + $any(field.field)" mode="decimal" [maxFractionDigits]="5"
+      [useGrouping]="false"></p-inputNumber>
+    }
+    @case (FieldType.checkbox) {
+    <p-checkbox [ngModel]="getCheckboxValue(field)" (ngModelChange)="setValue(field, $event)" [binary]="true"
+      [inputId]="'card-data-' + $any(field.field)"></p-checkbox>
+    }
+    @default {
+    <textarea pTextarea [ngModel]="getValue(field)" (ngModelChange)="setValue(field, $event)"
+      [id]="'card-data-' + $any(field.field)" [rows]="1" [autoResize]="true"></textarea>
+    }
+    }
+    }
+  </div>
+  }
+</div>
+}

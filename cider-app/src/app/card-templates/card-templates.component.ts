@@ -5,7 +5,7 @@ import { CardTemplatesService } from '../data-services/services/card-templates.s
 import { CardsService } from '../data-services/services/cards.service';
 import { CardTemplate } from '../data-services/types/card-template.type';
 import { Card } from '../data-services/types/card.type';
-import { Subject, debounceTime } from 'rxjs';
+import { Subject, Subscription, debounceTime, groupBy, mergeMap } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { LocalStorageService, PreviewSettings } from '../data-services/local-storage/local-storage.service';
 
@@ -71,6 +71,8 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     automaticLayout: true, minimap: { enabled: false } };
   templates: CardTemplate[] = [];
   cards: Card[] = [];
+  // the card dropdown ignores deep-equal option arrays, so names are copied out to refresh on rename
+  cardOptions: { name: string, card: Card }[] = [];
   selectedCard: Card = {} as Card;
   selectedTemplate: CardTemplate = {} as CardTemplate;
   editTemplate: CardTemplate = {} as CardTemplate;
@@ -93,7 +95,8 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     trimUnit: 'in',
     safeLinesEnabled: false,
     safeOffset: 0.25,
-    safeUnit: 'in'
+    safeUnit: 'in',
+    cardDataColumnEnabled: false
   };
   unitOptions = [
     { label: 'Inches', value: 'in' },
@@ -106,6 +109,13 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
   private scrollLeftStart: number = 0;
   private scrollTopStart: number = 0;
   private resizeObserver: ResizeObserver | null = null;
+  private cardChanges: Subject<Card> = new Subject<Card>();
+  private pendingCardSaves: Map<number, Card> = new Map<number, Card>();
+  // debounce per card so switching cards mid-edit does not drop the previous card's save
+  private cardSaveSubscription: Subscription = this.cardChanges.pipe(
+    groupBy(card => card.id),
+    mergeMap(group => group.pipe(debounceTime(1000)))
+  ).subscribe(card => this.saveCard(card));
 
 
   constructor(private domSanitizer: DomSanitizer, 
@@ -153,9 +163,17 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     });
     this.cardsService.getAll().then(cards => {
       this.cards = cards;
-      if (this.cards.length > 0) {
-        this.selectedCard = this.cards[0];
-      }
+      this.refreshCardOptions();
+      // preselect the card requested in the url (e.g. from the thumbnails view), otherwise the first card
+      this.route.queryParamMap.subscribe(params => {
+        const cardId = parseInt(params.get('cardId') || '', 10);
+        const requestedCard = this.cards.find(card => card.id === cardId);
+        if (requestedCard) {
+          this.selectedCard = requestedCard;
+        } else if (!this.selectedCard.id && this.cards.length > 0) {
+          this.selectedCard = this.cards[0];
+        }
+      });
     });
     this.templateChanges.asObservable().pipe(debounceTime(1000))
       .subscribe(() => this.save(this.selectedTemplate));
@@ -197,6 +215,29 @@ export class CardTemplatesComponent implements OnInit, AfterViewInit, OnDestroy 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }
+    // save any card edits still waiting on the debounce
+    this.cardSaveSubscription.unsubscribe();
+    Array.from(this.pendingCardSaves.values()).forEach(card => this.saveCard(card));
+  }
+
+  public onCardEdited(card: Card) {
+    this.templateVersion++;
+    this.refreshCardOptions();
+    this.pendingCardSaves.set(card.id, card);
+    this.cardChanges.next(card);
+  }
+
+  private refreshCardOptions() {
+    this.cardOptions = this.cards.map(card => ({ name: card.name, card: card }));
+  }
+
+  private saveCard(card: Card) {
+    if (!this.pendingCardSaves.delete(card.id)) {
+      return;
+    }
+    this.cardsService.update(card.id, card).catch(error => {
+      console.error(`Error saving card with ID ${card.id}:`, error);
+    });
   }
 
   @HostListener('window:resize', ['$event'])

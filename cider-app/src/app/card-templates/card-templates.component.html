@@ -4,11 +4,23 @@
     (onResizeStart)="onResizeStart($event)" (onResizeEnd)="onResizeEnd($event)">
     <ng-template pTemplate>
       <div class="left-panel p-col p-flex p-align-items-center p-justify-content-center">
-        <p-card styleClass="page-card">
+        @if (previewSettings.cardDataColumnEnabled) {
+        <p-card class="card-data-column" styleClass="card-data-card">
+          <div class="card-data-title">{{ 'template-editor.card-data-title' | translate }}</div>
+          <div class="card-data-scroll">
+            @if (selectedCard.id) {
+            <app-card-data-editor [card]="selectedCard" (cardEdited)="onCardEdited($event)"></app-card-data-editor>
+            } @else {
+            <div class="card-data-empty">{{ 'template-editor.no-card-selected' | translate }}</div>
+            }
+          </div>
+        </p-card>
+        }
+        <p-card class="preview-column" styleClass="page-card">
           @if (!disablePanels) {
           <div class="preview-controls">
-            <p-select [options]="cards" [(ngModel)]="selectedCard" [filter]="true" filterBy="name" optionLabel="name"
-              class="card-dropdown"></p-select>
+            <p-select [options]="cardOptions" [(ngModel)]="selectedCard" [filter]="true" filterBy="name" optionLabel="name"
+              optionValue="card" class="card-dropdown"></p-select>
             <p-buttongroup>
               <button pButton type="button" icon="pi pi-search-minus" (click)="changeZoom(ZOOM_DOWN)"
                 [pTooltip]="'controls.zoom-out' | translate"></button>
@@ -82,6 +94,13 @@
 <p-dialog [header]="'template-editor.preview-settings-title' | translate" [(visible)]="settingsVisible" [modal]="true" [style]="{width: '400px'}"
   [draggable]="false" [resizable]="false" styleClass="preview-settings-dialog" (onHide)="saveSettings()">
   <div class="p-fluid">
+    <div class="settings-section">
+      <div class="p-flex p-align-items-center">
+        <p-checkbox [(ngModel)]="previewSettings.cardDataColumnEnabled" [binary]="true" inputId="card-data" (ngModelChange)="saveSettings()"></p-checkbox>
+        <label for="card-data" class="p-mb-0 p-ml-2">{{ 'template-editor.show-card-data' | translate }}</label>
+      </div>
+    </div>
+
     <div class="settings-section">
       <div class="p-flex p-align-items-center">
         <p-checkbox [(ngModel)]="previewSettings.tiltEnabled" [binary]="true" inputId="tilt" (ngModelChange)="saveSettings()"></p-checkbox>

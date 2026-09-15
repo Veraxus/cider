@@ -56,6 +56,8 @@
 
     app-card-preview {
         margin: 10px;
+        // double-click opens the template, so don't select card text
+        user-select: none;
     }
 }
 

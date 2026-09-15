@@ -1,4 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { CardTemplatesService } from '../data-services/services/card-templates.service';
 import { CardsService } from '../data-services/services/cards.service';
 import { Card } from '../data-services/types/card.type';
@@ -36,7 +37,8 @@ export class CardThumbnailsComponent implements OnInit {
 
   constructor(public cardsService: CardsService,
     private translate: TranslateService,
-    public templatesService: CardTemplatesService) { }
+    public templatesService: CardTemplatesService,
+    private router: Router) { }
 
   ngOnInit(): void {
     this.refreshCards();
@@ -73,6 +75,16 @@ export class CardThumbnailsComponent implements OnInit {
 
   filter(input: any) {
     (this.dv as any).filter(input.target.value, 'contains');
+  }
+
+  /**
+   * Open the given template in the template editor with the card preselected
+   */
+  openTemplate(card: Card, templateId: number) {
+    if (!templateId) {
+      return;
+    }
+    this.router.navigate(['/decks', card.deckId, 'templates', templateId], { queryParams: { cardId: card.id } });
   }
 
 }

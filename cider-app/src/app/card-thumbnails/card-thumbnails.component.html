@@ -20,11 +20,13 @@
           @for (card of cards; track $index) {
           @if (sideSelected == 'fronts' || sideSelected == 'both') {
           <app-card-preview [cache]="false" [tiltable]="true" [card]="card" [scale]="zoomLevel"
-            [template]="card.frontCardTemplateId | entity: templatesService | async"></app-card-preview>
+            [template]="card.frontCardTemplateId | entity: templatesService | async"
+            (dblclick)="openTemplate(card, card.frontCardTemplateId)"></app-card-preview>
           }
           @if (sideSelected == 'backs' || sideSelected == 'both') {
           <app-card-preview [cache]="false" [tiltable]="true" [card]="card" [scale]="zoomLevel"
-            [template]="card.backCardTemplateId | entity: templatesService | async"></app-card-preview>
+            [template]="card.backCardTemplateId | entity: templatesService | async"
+            (dblclick)="openTemplate(card, card.backCardTemplateId)"></app-card-preview>
           }
           }
         </div>

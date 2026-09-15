@@ -43,6 +43,7 @@ export interface PreviewSettings {
   safeLinesEnabled: boolean;
   safeOffset: number;
   safeUnit: 'in' | 'px' | 'mm';
+  cardDataColumnEnabled?: boolean;
 }
 
 /**

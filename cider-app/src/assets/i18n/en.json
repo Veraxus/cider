@@ -216,6 +216,9 @@
         "enable-tilt": "Enable Dynamic Card Tilt",
         "show-trim-lines": "Show Trim/Cut Lines",
         "show-safe-lines": "Show Safe Area Lines",
-        "offset-from-edge": "Offset From Edge"
+        "offset-from-edge": "Offset From Edge",
+        "show-card-data": "Show Card Data Column",
+        "card-data-title": "Card Data",
+        "no-card-selected": "No card selected"
     }
 }
