@@ -36,6 +36,11 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
 
 
     private cards: Card[] = [];
+    // the spreadsheet replaces every row array when a cell changes, which drops the card id
+    // stashed on the row, so the ids are kept here by row position and stamped back onto the rows
+    private rowIds: (number | undefined)[] = [];
+    // cards whose rows were deleted, written out on the next save
+    private pendingDeletions: Set<number> = new Set();
     private attributes: CardAttribute[] = [];
     private subscriptions: Subscription = new Subscription();
     private spreadsheet = viewChild(SpreadsheetComponent);
@@ -126,7 +131,15 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
         await this.flushPendingChanges();
         const card = this.cardForRow(modelRow);
         const menuData = spreadsheet.contextMenuData();
-        const spreadsheetAction = (action: string) => () => spreadsheet.handleContextMenuAction(action);
+        // clicking this menu counts as a click outside the spreadsheet, which clears the selection
+        // that insert, delete, copy and paste act on, so put the selection back first
+        const activeCell = spreadsheet.activeCell();
+        const selectionRanges = spreadsheet.selectionRanges();
+        const spreadsheetAction = (action: string) => () => {
+            spreadsheet.activeCell.set(activeCell);
+            spreadsheet.selectionRanges.set(selectionRanges);
+            spreadsheet.handleContextMenuAction(action);
+        };
 
         this.rowMenuItems = [
             {
@@ -157,8 +170,8 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
      * The saved card for a spreadsheet row, matched the same way processDataChange matches rows
      */
     private cardForRow(modelRow: number): Card | undefined {
-        const recordId = (this.data()[modelRow] as any)?.recordId;
-        return recordId !== undefined ? this.cards.find(card => card.id === recordId) : this.cards[modelRow];
+        const recordId = this.rowIds[modelRow];
+        return recordId !== undefined ? this.cards.find(card => card.id === recordId) : undefined;
     }
 
     private openTemplate(card: Card, templateId: number) {
@@ -293,6 +306,8 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
             return row;
         });
 
+        this.rowIds = this.cards.map(card => card.id);
+        this.pendingDeletions.clear();
         this.data.set(rows);
     }
 
@@ -313,27 +328,72 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     }
 
     onDataChanged(newData: Cell[][]): void {
+        this.syncRowIds(newData);
         this.dataChangeSubject.next(newData);
+    }
+
+    /**
+     * Keeps track of which card each row belongs to. Inserting or deleting rows keeps the
+     * surviving row arrays, and with them the stashed ids, so those changes still line up; editing
+     * a cell copies every row array instead, so the ids have to be stamped back on afterwards.
+     */
+    private syncRowIds(rows: Cell[][]): void {
+        const stashedIds = rows.map(row => (row as any).recordId as number | undefined);
+        if (stashedIds.some(id => id !== undefined)) {
+            this.trackRemovedCards(stashedIds);
+            this.rowIds = stashedIds;
+        } else if (rows.length !== this.rowIds.length) {
+            // no row knows its card, so rows can only be lined up by position, and a row that was
+            // removed can't be told apart from one that moved; nothing is deleted from that guess
+            this.rowIds = rows.map((row, index) => this.rowIds[index]);
+        }
+        rows.forEach((row, index) => (row as any).recordId = this.rowIds[index]);
+    }
+
+    /**
+     * Queues the cards of rows that are no longer in the grid. Only ids the grid itself was
+     * showing are queued, so a card this view never loaded is never deleted.
+     */
+    private trackRemovedCards(newRowIds: (number | undefined)[]): void {
+        const keptIds = new Set(newRowIds);
+        this.rowIds.forEach(id => {
+            if (id !== undefined && !keptIds.has(id)) {
+                this.pendingDeletions.add(id);
+            }
+        });
+    }
+
+    private async deleteRemovedCards(): Promise<void> {
+        if (this.pendingDeletions.size === 0) {
+            return;
+        }
+        // an undo can bring a row back before its card is written out
+        const currentIds = new Set(this.rowIds);
+        const removedIds = [...this.pendingDeletions].filter(id => !currentIds.has(id));
+        this.pendingDeletions.clear();
+        for (const id of removedIds) {
+            await this.cardsService.delete(id);
+        }
+        this.cards = this.cards.filter(card => card.id === undefined || !removedIds.includes(card.id));
     }
 
     private async processDataChange(newData: Cell[][]): Promise<void> {
         this.isLoading.set(true);
         try {
             const currentConfig = this.columnConfig();
+            // a cell that was still being edited is saved into the grid without an emitted change,
+            // so line the rows up with their cards again before reading them
+            this.syncRowIds(newData);
+            await this.deleteRemovedCards();
 
             for (let rowIndex = 0; rowIndex < newData.length; rowIndex++) {
                 const row = newData[rowIndex];
-                // Try to find by stashed ID first, fall back to index if missing
-                const recordId = (row as any).recordId;
-                let originalCard: Card | undefined;
-
-                if (recordId !== undefined) {
-                    originalCard = this.cards.find(c => c.id === recordId);
-                } else {
-                    if (rowIndex < this.cards.length) {
-                        originalCard = this.cards[rowIndex];
-                    }
-                }
+                const recordId = this.rowIds[rowIndex];
+                // a row without an id has no card yet; matching those by position used to rewrite
+                // every card below an inserted row
+                const originalCard = recordId !== undefined
+                    ? this.cards.find(c => c.id === recordId)
+                    : undefined;
 
                 if (originalCard) {
                     const updatedCard: any = { ...originalCard };
@@ -389,14 +449,10 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
 
                             // Attach the new ID to the row so subsequent edits update this card
                             (row as any).recordId = createdCard.id;
+                            this.rowIds[rowIndex] = createdCard.id;
 
-                            // Add to local cache at the correct position if possible, 
-                            // or just ensure lookup finds it next time.
-                            if (rowIndex >= this.cards.length) {
-                                this.cards.push(createdCard);
-                            } else {
-                                this.cards[rowIndex] = createdCard;
-                            }
+                            // the cache is only read by id, so its order doesn't have to match
+                            this.cards.push(createdCard);
                         } catch (error) {
                             console.error('Error creating card:', error);
                         }
