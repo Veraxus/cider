@@ -335,6 +335,17 @@
             </div>
           </div>
 
+          @if (selectedPaper.name.includes('Tabletop')) {
+          <div class="p-field">
+            <label for="ttsImageBaseUrl">{{'export.tts-image-base-url' | translate}}</label>
+            <input type="text" pInputText id="ttsImageBaseUrl" [(ngModel)]="ttsImageBaseUrl"
+              placeholder="https://your-image-host.com/my-deck" (ngModelChange)="saveSettings()" />
+          </div>
+          <div class="p-field">
+            <p-message severity="info">{{'export.tts-image-base-url-info' | translate}}</p-message>
+          </div>
+          }
+
           <div class="p-field">
             <p-message severity="info">{{'export.export-information' | translate}}</p-message>
           </div>

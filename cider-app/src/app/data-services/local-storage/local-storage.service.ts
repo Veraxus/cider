@@ -29,6 +29,7 @@ export interface ExportConfiguration {
   individualExportUseCardName?: boolean;
   scale?: number;
   maxTtsPixels?: number;
+  ttsImageBaseUrl?: string;
   softProofMode?: string;
   softProofIntent?: number;
   softProofEnabled?: boolean;

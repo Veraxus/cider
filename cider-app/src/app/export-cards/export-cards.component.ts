@@ -3,13 +3,15 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CardPreviewComponent } from '../card-preview/card-preview.component';
 import { CardTemplatesService } from '../data-services/services/card-templates.service';
 import { CardsService } from '../data-services/services/cards.service';
+import { CardAttributesService } from '../data-services/services/card-attributes.service';
+import { DecksService } from '../data-services/services/decks.service';
 import { Card } from '../data-services/types/card.type';
 import { ImageRendererService } from '../data-services/services/image-renderer.service';
 import JSZip from 'jszip';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import pLimit from 'p-limit';
 import FileUtils from '../shared/utils/file-utils';
-import { lastValueFrom } from 'rxjs';
+import { firstValueFrom, lastValueFrom } from 'rxjs';
 import StringUtils from '../shared/utils/string-utils';
 import GeneralUtils from '../shared/utils/general-utils';
 import { ConfirmationService } from 'primeng/api';
@@ -29,6 +31,8 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   private static readonly SINGULAR_EXPORT = 'singular-export';
   private static readonly SHEET_EXPORT = 'sheet-export';
   public static readonly PDF_DPI = 72;
+  private static readonly TTS_GRID_COLUMNS = 10;
+  private static readonly TTS_GRID_ROWS = 7;
   private static readonly EXPORT_OPTIONS: RadioOption[] = [
     { name: 'Card Sheet', value: ExportCardsComponent.SHEET_EXPORT },
     { name: 'Individual Images', value: ExportCardsComponent.SINGULAR_EXPORT }
@@ -92,6 +96,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   public individualExportPixelRatio: number = 1;
   public individualExportUseCardName: boolean = false;
   public maxTtsPixels: number = 4096;
+  public ttsImageBaseUrl: string = '';
   public scale: number = 0.1;
   public exportSelectionDialogVisible: boolean = false;
   public excludeCardBacks: boolean = false;
@@ -130,6 +135,8 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
 
   constructor(cardsService: CardsService,
     public templatesService: CardTemplatesService,
+    private attributesService: CardAttributesService,
+    private decksService: DecksService,
     private imageRendererService: ImageRendererService,
     private translate: TranslateService,
     private localStorageService: LocalStorageService,
@@ -202,6 +209,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       if (config.individualExportUseCardName !== undefined) this.individualExportUseCardName = config.individualExportUseCardName;
       if (config.scale !== undefined) this.scale = config.scale;
       if (config.maxTtsPixels !== undefined) this.maxTtsPixels = config.maxTtsPixels;
+      if (config.ttsImageBaseUrl !== undefined) this.ttsImageBaseUrl = config.ttsImageBaseUrl;
 
       if (config.softProofMode !== undefined) {
         // Only set if it's 'none' or exists in our dynamic options
@@ -396,6 +404,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       individualExportUseCardName: this.individualExportUseCardName,
       scale: this.scale,
       maxTtsPixels: this.maxTtsPixels,
+      ttsImageBaseUrl: this.ttsImageBaseUrl,
       softProofMode: this.softProofMode,
       softProofIntent: this.softProofIntent,
       softProofEnabled: this.softProofEnabled,
@@ -569,6 +578,15 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
     }
   }
 
+  /**
+   * Base name for exported files, derived from the selected deck's name so downloads aren't
+   * all generically named "cards".
+   */
+  private async getExportBaseName(): Promise<string> {
+    const deck = await firstValueFrom(this.decksService.getSelectedDeck());
+    return (deck?.name && StringUtils.toKebabCase(deck.name)) || 'cards';
+  }
+
   private displayErrorDialog(message: string) {
     this.confirmationService.confirm({
       message: message + '\nCheck for errors in this template and card data.',
@@ -654,16 +672,107 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
     });
     const sheetImages = (await Promise.all(promisedSheetImages$)).flatMap(sheetImages => sheetImages);
 
+    this.loadingInfo = 'Generating Tabletop Simulator save file...';
+    const ttsSaveFile = await this.buildTtsSaveObject();
+
     this.loadingInfo = 'Zipping up files...';
-    const zippedImages = await this.zipFiles(sheetImages);
+    const zippedImages = await this.zipFiles(sheetImages.concat([ttsSaveFile]));
     this.loadingInfo = 'Saving file...';
-    FileUtils.saveAs(zippedImages, 'cards.zip');
+    FileUtils.saveAs(zippedImages, (await this.getExportBaseName()) + '.zip');
     this.loadingPercent = 100;
     this.sheet = this.slicedCards ? this.slicedCards[this.currentPageIndex] : [];
     this.showFront = true;
     this.showBack = false;
     this.renderCache = false;
     this.displayLoading = false
+  }
+
+  /**
+   * Builds a Tabletop Simulator "Saved Object" JSON describing a custom deck: one CustomDeck
+   * entry per sprite sheet, and one ContainedObjects entry per card carrying its Nickname,
+   * Description and GMNotes (a JSON dump of the deck's custom attributes) so the whole deck can
+   * be dragged into TTS in one go instead of losing that data on import.
+   */
+  private async buildTtsSaveObject(): Promise<File> {
+    const attributes = (await this.attributesService.getAll()).filter(attribute => !attribute.isSystem);
+    const descriptionAttribute = attributes.find(attribute => attribute.name.trim().toLowerCase() === 'description');
+
+    const customDeck: { [deckKey: string]: any } = {};
+    const containedObjects: any[] = [];
+    const deckIds: number[] = [];
+
+    this.slicedCards.forEach((sheet, sheetIndex) => {
+      const deckKey = sheetIndex + 1;
+      const deckDefinition = {
+        FaceURL: this.resolveTtsImageUrl('sheet-front-' + sheetIndex + '.png'),
+        BackURL: this.resolveTtsImageUrl(this.excludeCardBacks
+          ? 'sheet-front-' + sheetIndex + '.png'
+          : 'sheet-back-' + sheetIndex + '.png'),
+        NumWidth: ExportCardsComponent.TTS_GRID_COLUMNS,
+        NumHeight: ExportCardsComponent.TTS_GRID_ROWS,
+        BackIsHidden: this.excludeCardBacks,
+        UniqueBack: !this.excludeCardBacks,
+        Type: 0
+      };
+      customDeck[deckKey] = deckDefinition;
+
+      sheet.forEach((card, gridPosition) => {
+        const cardId = deckKey * 100 + gridPosition;
+        deckIds.push(cardId);
+
+        const gmNotes: { [attributeName: string]: any } = {};
+        attributes.forEach(attribute => {
+          gmNotes[attribute.name] = (<any>card)[StringUtils.toKebabCase(attribute.name)];
+        });
+
+        containedObjects.push({
+          Name: 'Card',
+          Nickname: card.name || '',
+          Description: descriptionAttribute
+            ? String((<any>card)[StringUtils.toKebabCase(descriptionAttribute.name)] ?? '')
+            : '',
+          GMNotes: Object.keys(gmNotes).length ? JSON.stringify(gmNotes) : '',
+          CardID: cardId,
+          Transform: {
+            posX: 0, posY: 0, posZ: 0,
+            rotX: 0, rotY: 180, rotZ: 180,
+            scaleX: 1, scaleY: 1, scaleZ: 1
+          },
+          CustomDeck: { [deckKey]: deckDefinition }
+        });
+      });
+    });
+
+    const saveObject = {
+      ObjectStates: [
+        {
+          Name: 'DeckCustom',
+          Transform: {
+            posX: 0, posY: 1, posZ: 0,
+            rotX: 0, rotY: 180, rotZ: 180,
+            scaleX: 1, scaleY: 1, scaleZ: 1
+          },
+          Nickname: '',
+          Description: '',
+          GMNotes: '',
+          CustomDeck: customDeck,
+          DeckIDs: deckIds,
+          ContainedObjects: containedObjects
+        }
+      ]
+    };
+
+    return new File([JSON.stringify(saveObject, null, 2)], 'cards.json', { type: 'application/json' });
+  }
+
+  /**
+   * FaceURL/BackURL in a TTS save object must be a reachable URI. If the user hasn't given us a
+   * base URL to host the sprite sheets at, fall back to the bare filename so the JSON is still
+   * complete -- the user then hosts the images and edits these paths (or the file in place).
+   */
+  private resolveTtsImageUrl(fileName: string): string {
+    const base = (this.ttsImageBaseUrl || '').trim().replace(/\/+$/, '');
+    return base ? base + '/' + fileName : fileName;
   }
 
   private async exportCardSheets() {
@@ -723,8 +832,9 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       pageOrientation: this.selectedPaper.orientation,
       pageMargins: [0, 0, 0, 0] as [number, number, number, number]
     };
+    const exportFileName = (await this.getExportBaseName()) + '.pdf';
     pdfMake.createPdf(docDefinition).getBlob((blob) => {
-      FileUtils.saveAs(blob, 'card-sheets.pdf');
+      FileUtils.saveAs(blob, exportFileName);
       this.loadingPercent = 100;
       this.sheet = this.slicedCards ? this.slicedCards[this.currentPageIndex] : [];
       this.displayLoading = false
@@ -799,7 +909,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       this.loadingInfo = 'Zipping up files...';
       const blob = await this.zipFiles(allExportedFiles);
       this.loadingInfo = 'Saving file...';
-      FileUtils.saveAs(blob, 'cards.zip');
+      FileUtils.saveAs(blob, (await this.getExportBaseName()) + '.zip');
 
     } catch (err) {
       this.loadingInfo = 'Failed to load card cache.';
