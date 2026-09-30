@@ -6,12 +6,28 @@
     @if (field.service) {
     <p-select [options]="(field.service | entityList | async) || []" [ngModel]="getValue(field)"
       (ngModelChange)="setValue(field, $event)" [inputId]="'card-data-' + $any(field.field)" optionLabel="name"
-      [optionValue]="field.service.getIdField()" appendTo="body"></p-select>
+      [optionValue]="field.service.getIdField()" appendTo="body" [showClear]="true"></p-select>
     } @else {
     @switch (field.type) {
     @case (FieldType.dropdown) {
     <p-select [options]="field.options || []" [ngModel]="getValue(field)" (ngModelChange)="setValue(field, $event)"
-      [inputId]="'card-data-' + $any(field.field)" optionLabel="value" optionValue="value" appendTo="body"></p-select>
+      [inputId]="'card-data-' + $any(field.field)" optionLabel="value" optionValue="value" appendTo="body"
+      [showClear]="true"></p-select>
+    }
+    @case (FieldType.multiSelect) {
+    <div class="multi-select-options">
+      @for (option of field.options || []; track option.value) {
+      <div class="multi-select-option">
+        <p-checkbox [ngModel]="isSelected(field, option.value)"
+          (ngModelChange)="toggleSelection(field, option.value, $event)" [binary]="true"
+          [inputId]="multiSelectInputId(field, option.value)"></p-checkbox>
+        <label [for]="multiSelectInputId(field, option.value)">{{option.value}}</label>
+      </div>
+      }
+      @if (!(field.options || []).length) {
+      <div class="multi-select-empty">{{ 'template-editor.no-options' | translate }}</div>
+      }
+    </div>
     }
     @case (FieldType.numeric) {
     <p-inputNumber [ngModel]="getValue(field)" (ngModelChange)="setValue(field, $event)"

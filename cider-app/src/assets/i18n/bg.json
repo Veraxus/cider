@@ -126,6 +126,7 @@
         "mirror-backs-y": "Огледални гръбове Y",
         "paper-dpi": "DPI на хартията (точки на инч)",
         "max-tts-pixels": "Максимални TTS пиксели",
+        "tts-hide-when-face-down": "Prevent Mouseover Spoilers (Face-Down Cards)",
         "tts-image-base-url": "TTS Image Host URL (optional)",
         "tts-image-base-url-info": "cards.json is included in the zip and can be dragged straight into Tabletop Simulator with every card's name and custom fields attached. To also auto-load the sprite sheets, host the extracted images somewhere and put that folder's URL here before exporting; otherwise edit the FaceURL/BackURL fields in cards.json yourself afterward.",
         "scale": "Мащаб (по-големи/по-малки изображения)",
@@ -179,7 +180,8 @@
         "card-data-title": "Данни за картата",
         "no-card-selected": "Няма избрана карта",
         "previous-card": "Предишна карта (Alt+,)",
-        "next-card": "Следваща карта (Alt+.)"
+        "next-card": "Следваща карта (Alt+.)",
+        "no-options": "Няма дефинирани опции за този атрибут"
     },
     "spreadsheet": {
         "loading": "Зареждане на картите...",

@@ -32,4 +32,26 @@
     ::ng-deep p-inputnumber .p-inputnumber-input {
         width: 100%;
     }
+
+    .multi-select-options {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+
+        .multi-select-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            label {
+                font-weight: 400;
+                cursor: pointer;
+            }
+        }
+
+        .multi-select-empty {
+            color: var(--p-text-muted-color);
+            font-size: 0.9rem;
+        }
+    }
 }

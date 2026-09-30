@@ -18,6 +18,7 @@ export class CardDataEditorComponent implements OnInit {
   @Output() cardEdited: EventEmitter<Card> = new EventEmitter<Card>();
   fields: EntityField<Card>[] = [];
   FieldType = FieldType;
+  static readonly MULTI_SELECT_SEPARATOR = ', ';
 
   constructor(private cardsService: CardsService) { }
 
@@ -32,6 +33,39 @@ export class CardDataEditorComponent implements OnInit {
   public getCheckboxValue(field: EntityField<Card>): boolean {
     const value = this.getValue(field);
     return value === true || value === 'true';
+  }
+
+  /**
+   * Multi-select values are stored as a comma separated list, the same way a dropdown stores its
+   * single value, so they export to the csv and render in a template without any extra handling.
+   */
+  public getSelectedValues(field: EntityField<Card>): string[] {
+    const value = this.getValue(field);
+    return value === undefined || value === null || value === ''
+      ? []
+      : String(value).split(',').map(entry => entry.trim()).filter(entry => entry.length > 0);
+  }
+
+  public isSelected(field: EntityField<Card>, option: string): boolean {
+    return this.getSelectedValues(field).includes(option);
+  }
+
+  public toggleSelection(field: EntityField<Card>, option: string, selected: boolean) {
+    const values = new Set(this.getSelectedValues(field));
+    if (selected) {
+      values.add(option);
+    } else {
+      values.delete(option);
+    }
+    // written out in the order the attribute defines its options, so the value is stable
+    const optionValues = (field.options || []).map(fieldOption => fieldOption.value);
+    const ordered = optionValues.filter(value => values.has(value))
+      .concat([...values].filter(value => !optionValues.includes(value)));
+    this.setValue(field, ordered.join(CardDataEditorComponent.MULTI_SELECT_SEPARATOR));
+  }
+
+  public multiSelectInputId(field: EntityField<Card>, option: string): string {
+    return `card-data-${String(field.field)}-${option}`;
   }
 
   public setValue(field: EntityField<Card>, value: any) {

@@ -502,7 +502,7 @@ export class GameSimulatorComponent implements OnInit, OnDestroy {
             field.field === 'frontCardTemplateId' || field.field === 'backCardTemplateId') {
             continue;
           }
-          if (field.type !== FieldType.dropdown && field.type !== FieldType.text && field.type !== FieldType.numeric && field.type !== FieldType.dropdownOptions) {
+          if (field.type !== FieldType.dropdown && field.type !== FieldType.multiSelect && field.type !== FieldType.text && field.type !== FieldType.numeric && field.type !== FieldType.dropdownOptions) {
             continue;
           }
           if (!seenFields.has(field.field as string)) {

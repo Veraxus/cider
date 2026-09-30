@@ -30,6 +30,7 @@ export interface ExportConfiguration {
   scale?: number;
   maxTtsPixels?: number;
   ttsImageBaseUrl?: string;
+  ttsHideWhenFaceDown?: boolean;
   softProofMode?: string;
   softProofIntent?: number;
   softProofEnabled?: boolean;

@@ -181,6 +181,21 @@ export class HandlebarsPipe implements PipeTransform {
     });
 
     /**
+     * {{join card.keywords ' / '}}
+     * Joins a multi-select value (or any comma separated value, or an array) with the given
+     * separator, which defaults to ', '. Use a triple stash for an html separator:
+     * {{{join card.keywords '<br>'}}}
+     */
+    Handlebars.registerHelper('join', function (value, separator) {
+      // handlebars always passes its own options object as the last argument
+      const glue = typeof separator === 'string' ? separator : ', ';
+      const values = Array.isArray(value) ? value : ('' + (value ?? '')).split(',');
+      return values.map(entry => ('' + entry).trim())
+        .filter(entry => entry.length > 0)
+        .join(glue);
+    });
+
+    /**
      * {{kebabcase 'Clear Orb'}}
      * {{kebab-case 'Clear Orb'}}
      */

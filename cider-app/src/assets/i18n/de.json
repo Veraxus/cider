@@ -127,6 +127,7 @@
         "mirror-backs-y": "Rückseiten spiegeln Y",
         "paper-dpi": "Papier DPI (Punkte pro Zoll)",
         "max-tts-pixels": "Max. TTS Pixel",
+        "tts-hide-when-face-down": "Prevent Mouseover Spoilers (Face-Down Cards)",
         "tts-image-base-url": "TTS Image Host URL (optional)",
         "tts-image-base-url-info": "cards.json is included in the zip and can be dragged straight into Tabletop Simulator with every card's name and custom fields attached. To also auto-load the sprite sheets, host the extracted images somewhere and put that folder's URL here before exporting; otherwise edit the FaceURL/BackURL fields in cards.json yourself afterward.",
         "scale": "Skalierung (größere/kleinere Bilder)",
@@ -180,7 +181,8 @@
         "card-data-title": "Card Data",
         "no-card-selected": "No card selected",
         "previous-card": "Previous card (Alt+,)",
-        "next-card": "Next card (Alt+.)"
+        "next-card": "Next card (Alt+.)",
+        "no-options": "No options defined for this attribute"
     },
     "spreadsheet": {
         "loading": "Loading cards...",

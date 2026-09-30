@@ -285,6 +285,8 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
             case FieldType.numeric: return 'numeric';
             case FieldType.dropdown: return 'dropdown';
             case FieldType.checkbox: return 'checkbox';
+            // the spreadsheet has no multi-select editor, so those cells hold the selected
+            // options as a comma separated list and are edited as text
             default: return 'text';
         }
     }
@@ -517,7 +519,11 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
 
                     // 3. Update Type
                     const newType = this.mapToFieldType(config.editor);
-                    if (!attr.isSystem && attr.type !== newType) {
+                    // several attribute types share the text editor, so a column is only retyped
+                    // when the editor it shows actually changed; otherwise saving a column would
+                    // turn a multi-select attribute into plain text
+                    const editorChanged = this.mapEditor(attr.type) !== config.editor;
+                    if (!attr.isSystem && attr.type !== newType && editorChanged) {
                         attr.type = newType;
                         changed = true;
                     }

@@ -30,11 +30,15 @@ export class CardAttributesService extends DecksChildService<CardAttribute, numb
         options: [
           { value: FieldType.text, color: '#FFFFFF' },
           { value: FieldType.dropdown, color: '#FFFFFF' },
+          { value: FieldType.multiSelect, color: '#FFFFFF' },
           { value: FieldType.numeric, color: '#FFFFFF' },
           { value: FieldType.checkbox, color: '#FFFFFF' }
         ]
       },
-      { field: 'options', header: 'Options', type: FieldType.dropdownOptions, visible: (e) => e.type === FieldType.dropdown },
+      {
+        field: 'options', header: 'Options', type: FieldType.dropdownOptions,
+        visible: (e) => e.type === FieldType.dropdown || e.type === FieldType.multiSelect
+      },
       { field: 'width', header: 'Width', type: FieldType.numeric },
       { field: 'order', header: 'Order', type: FieldType.numeric }
     ]);
@@ -177,6 +181,12 @@ export class CardAttributesService extends DecksChildService<CardAttribute, numb
     if (normalizedType === FieldType.dropdown || normalizedType === 'option') {
       if ((entity.type as string) !== FieldType.dropdown) {
         entity.type = FieldType.dropdown;
+      }
+      entity.options = this.normalizeDropdownOptions(entity.options);
+    } else if (normalizedType === FieldType.multiSelect || normalizedType === 'multiselect') {
+      // a multi-select holds the same list of options as a dropdown, cards just pick several
+      if ((entity.type as string) !== FieldType.multiSelect) {
+        entity.type = FieldType.multiSelect;
       }
       entity.options = this.normalizeDropdownOptions(entity.options);
     }

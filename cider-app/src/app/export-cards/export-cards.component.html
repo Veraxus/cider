@@ -336,6 +336,13 @@
           </div>
 
           @if (selectedPaper.name.includes('Tabletop')) {
+          <div class="p-field checkbox-group">
+            <div class="checkbox-item">
+              <p-checkbox name="ttsHideWhenFaceDown" class="p-mr-2" [binary]="true" [(ngModel)]="ttsHideWhenFaceDown"
+                inputId="ttsHideWhenFaceDown" (onChange)="saveSettings()"></p-checkbox>
+              <label for="ttsHideWhenFaceDown">{{'export.tts-hide-when-face-down' | translate}}</label>
+            </div>
+          </div>
           <div class="p-field">
             <label for="ttsImageBaseUrl">{{'export.tts-image-base-url' | translate}}</label>
             <input type="text" pInputText id="ttsImageBaseUrl" [(ngModel)]="ttsImageBaseUrl"

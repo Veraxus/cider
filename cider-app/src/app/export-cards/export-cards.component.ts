@@ -97,6 +97,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   public individualExportUseCardName: boolean = false;
   public maxTtsPixels: number = 4096;
   public ttsImageBaseUrl: string = '';
+  public ttsHideWhenFaceDown: boolean = true;
   public scale: number = 0.1;
   public exportSelectionDialogVisible: boolean = false;
   public excludeCardBacks: boolean = false;
@@ -210,6 +211,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       if (config.scale !== undefined) this.scale = config.scale;
       if (config.maxTtsPixels !== undefined) this.maxTtsPixels = config.maxTtsPixels;
       if (config.ttsImageBaseUrl !== undefined) this.ttsImageBaseUrl = config.ttsImageBaseUrl;
+      if (config.ttsHideWhenFaceDown !== undefined) this.ttsHideWhenFaceDown = config.ttsHideWhenFaceDown;
 
       if (config.softProofMode !== undefined) {
         // Only set if it's 'none' or exists in our dynamic options
@@ -405,6 +407,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
       scale: this.scale,
       maxTtsPixels: this.maxTtsPixels,
       ttsImageBaseUrl: this.ttsImageBaseUrl,
+      ttsHideWhenFaceDown: this.ttsHideWhenFaceDown,
       softProofMode: this.softProofMode,
       softProofIntent: this.softProofIntent,
       softProofEnabled: this.softProofEnabled,
@@ -738,6 +741,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
             rotX: 0, rotY: 180, rotZ: 180,
             scaleX: 1, scaleY: 1, scaleZ: 1
           },
+          HideWhenFaceDown: this.ttsHideWhenFaceDown,
           CustomDeck: { [deckKey]: deckDefinition }
         });
       });
@@ -755,6 +759,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
           Nickname: '',
           Description: '',
           GMNotes: '',
+          HideWhenFaceDown: this.ttsHideWhenFaceDown,
           CustomDeck: customDeck,
           DeckIDs: deckIds,
           ContainedObjects: containedObjects
