@@ -1,6 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import StringUtils from '../utils/string-utils';
+import MultiSelectUtils from '../utils/multi-select-utils';
 import * as Handlebars from 'handlebars';
 
 @Pipe({
@@ -189,10 +190,31 @@ export class HandlebarsPipe implements PipeTransform {
     Handlebars.registerHelper('join', function (value, separator) {
       // handlebars always passes its own options object as the last argument
       const glue = typeof separator === 'string' ? separator : ', ';
-      const values = Array.isArray(value) ? value : ('' + (value ?? '')).split(',');
-      return values.map(entry => ('' + entry).trim())
-        .filter(entry => entry.length > 0)
-        .join(glue);
+      return MultiSelectUtils.split(value).join(glue);
+    });
+
+    /**
+     * {{ranges card.levels}}                 '0, 1, 2, 3, 5' -> '0-3, 5'
+     * {{ranges card.levels ' / '}}           '0, 1, 2, 3, 5' -> '0-3 / 5'
+     * {{ranges card.levels ', ' ' to '}}     '0, 1, 2, 3, 5' -> '0 to 3, 5'
+     * Like join, but runs of consecutive numbers are written as a range. Numbers are sorted and
+     * repeats dropped; values that aren't numbers are kept, in the order given, after the numbers.
+     */
+    Handlebars.registerHelper('ranges', function (value, separator, rangeSeparator) {
+      const glue = typeof separator === 'string' ? separator : ', ';
+      const rangeGlue = typeof rangeSeparator === 'string' ? rangeSeparator : '-';
+      const entries = MultiSelectUtils.split(value);
+      const isNumber = (entry: string) => !isNaN(Number(entry));
+      const numbers = [...new Set(entries.filter(isNumber).map(Number))].sort((a, b) => a - b);
+      const parts: string[] = [];
+      for (let index = 0; index < numbers.length; index++) {
+        const start = numbers[index];
+        while (index + 1 < numbers.length && numbers[index + 1] === numbers[index] + 1) {
+          index++;
+        }
+        parts.push(start === numbers[index] ? '' + start : start + rangeGlue + numbers[index]);
+      }
+      return parts.concat(entries.filter(entry => !isNumber(entry))).join(glue);
     });
 
     /**

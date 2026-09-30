@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, inject, signal, viewChild, WritableSignal } from '@angular/core';
+import { Component, ElementRef, EventEmitter, OnDestroy, OnInit, Output, effect, inject, signal, viewChild, WritableSignal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CardsService } from '../data-services/services/cards.service';
 import { CardAttributesService } from '../data-services/services/card-attributes.service';
@@ -10,12 +10,24 @@ import { Card } from '../data-services/types/card.type';
 import { CardAttribute } from '../data-services/types/card-attribute.type';
 import { Subscription, Subject, debounceTime, firstValueFrom, tap } from 'rxjs';
 import StringUtils from '../shared/utils/string-utils';
+import MultiSelectUtils from '../shared/utils/multi-select-utils';
 import { FieldType } from '../data-services/types/field-type.type';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { ContextMenu, ContextMenuModule } from 'primeng/contextmenu';
 import { MenuItem } from 'primeng/api';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CommonModule } from '@angular/common';
+
+/** the open option list of a multi-select cell */
+interface MultiSelectEdit {
+    row: number;
+    col: number;
+    top: number;
+    left: number;
+    width: number;
+    options: { value: string, color?: string }[];
+    values: string[];
+}
 
 @Component({
     selector: 'app-entity-spreadsheet',
@@ -30,6 +42,9 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     theme: WritableSignal<SpreadsheetTheme> = signal(longLight);
     isLoading: WritableSignal<boolean> = signal(false);
     rowMenuItems: MenuItem[] = [];
+    multiSelectEdit: WritableSignal<MultiSelectEdit | null> = signal(null);
+    /** asks the page to edit the attribute behind a column, in place of the spreadsheet's own column settings */
+    @Output() attributeEditRequested: EventEmitter<CardAttribute> = new EventEmitter<CardAttribute>();
 
     private lookups: Map<string, Map<string, number>> = new Map(); // Name -> ID
     private reverseLookups: Map<string, Map<number, string>> = new Map(); // ID -> Name
@@ -55,6 +70,9 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     private pendingColumnConfig: ColumnConfig[] | undefined;
     // changes are written one after another so a flush never runs alongside a debounced save
     private saveQueue: Promise<void> = Promise.resolve();
+    private static readonly MULTI_SELECT_MAX_HEIGHT = 240;
+    private static readonly MULTI_SELECT_MIN_WIDTH = 160;
+    private static readonly MULTI_SELECT_WINDOW_EDGE = 8;
     private unregisterPendingSaves: () => void;
 
     constructor(
@@ -77,6 +95,8 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
             ).subscribe(() => this.saveColumnChange())
         );
         this.unregisterPendingSaves = this.pendingSaves.register(() => this.flushPendingChanges());
+        this.interceptColumnSettings();
+        this.interceptMultiSelectEditing();
         // capture phase, so this runs before the spreadsheet's own right-click handlers
         this.hostElement.addEventListener('contextmenu', this.onRowContextMenu, true);
     }
@@ -87,11 +107,175 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
+        this.closeMultiSelectEditor();
         this.hostElement.removeEventListener('contextmenu', this.onRowContextMenu, true);
         this.subscriptions.unsubscribe();
         this.unregisterPendingSaves();
         // write edits from the last second instead of dropping them
         this.pendingSaves.track(this.flushPendingChanges());
+    }
+
+    /**
+     * The spreadsheet's own column settings only offer the four cell editors it can draw, so a
+     * column can't be given an attribute type it doesn't know, such as multi-select. Opening it on
+     * a deck attribute shows cider's attribute editor instead, which has every type and the option
+     * colors. System columns keep the spreadsheet's dialog, which only lets their width change.
+     */
+    private interceptColumnSettings(): void {
+        effect(() => {
+            const spreadsheet = this.spreadsheet();
+            if (!spreadsheet?.isColumnSettingsVisible()) {
+                return;
+            }
+            const colIndex = spreadsheet.columnSettingsColIndex();
+            const attribute = colIndex === null ? undefined : this.attributeForColumn(this.columnConfig()[colIndex]);
+            if (!attribute || attribute.isSystem) {
+                return;
+            }
+            spreadsheet.isColumnSettingsVisible.set(false);
+            this.openAttributeEditor(attribute);
+        });
+    }
+
+    /**
+     * The spreadsheet only draws text, numeric, checkbox and dropdown cell editors, so a
+     * multi-select cell would be edited as a comma separated string. Editing one opens cider's own
+     * option list instead, which ticks and unticks the same options the card data panel shows.
+     */
+    private interceptMultiSelectEditing(): void {
+        effect(() => {
+            const spreadsheet = this.spreadsheet();
+            const editing = spreadsheet?.editingCell();
+            if (!spreadsheet || !editing) {
+                return;
+            }
+            const config = this.columnConfig()[editing.col];
+            if (this.attributeForColumn(config)?.type !== FieldType.multiSelect) {
+                return;
+            }
+            spreadsheet.cancelEdit();
+            this.openMultiSelectEditor(editing.row, editing.col, config);
+        });
+    }
+
+    private openMultiSelectEditor(row: number, col: number, config: ColumnConfig): void {
+        const cell = this.hostElement.querySelector<HTMLElement>(`td[data-row="${row}"][data-col="${col}"]`);
+        if (!cell) {
+            return;
+        }
+        const options = (config.options ?? []).map(option => typeof option === 'string'
+            ? { value: option }
+            : { value: option.value, color: option.color });
+        const cellBounds = cell.getBoundingClientRect();
+        const height = Math.min(EntitySpreadsheetComponent.MULTI_SELECT_MAX_HEIGHT, options.length * 30 + 8);
+        const width = Math.max(cellBounds.width, EntitySpreadsheetComponent.MULTI_SELECT_MIN_WIDTH);
+        // open upwards when the list would hang off the bottom of the window, and pull it back
+        // when it would hang off the right, which the last columns of a wide table do
+        const opensUpward = cellBounds.bottom + height > window.innerHeight && cellBounds.top > height;
+        const edge = EntitySpreadsheetComponent.MULTI_SELECT_WINDOW_EDGE;
+        this.multiSelectEdit.set({
+            row: row,
+            col: col,
+            top: opensUpward ? cellBounds.top - height : cellBounds.bottom,
+            left: Math.max(edge, Math.min(cellBounds.left, window.innerWidth - width - edge)),
+            width: width,
+            options: options,
+            values: MultiSelectUtils.split(this.data()[row]?.[col]?.value)
+        });
+        document.addEventListener('mousedown', this.onMultiSelectOutsideEvent, true);
+        document.addEventListener('keydown', this.onMultiSelectKeyDown, true);
+        // the list is placed against the cell, so it has to go once the cell moves
+        window.addEventListener('scroll', this.onMultiSelectOutsideEvent, true);
+    }
+
+    public isMultiSelectOptionSelected(option: string): boolean {
+        return this.multiSelectEdit()?.values.includes(option) ?? false;
+    }
+
+    public toggleMultiSelectOption(option: string): void {
+        const edit = this.multiSelectEdit();
+        if (!edit) {
+            return;
+        }
+        const current = this.data()[edit.row]?.[edit.col]?.value;
+        const selected = !MultiSelectUtils.split(current).includes(option);
+        const value = MultiSelectUtils.toggle(current, option, selected, edit.options.map(o => o.value));
+        this.setCellValue(edit.row, edit.col, value);
+        this.multiSelectEdit.set({ ...edit, values: MultiSelectUtils.split(value) });
+        this.reselectCell(edit.row, edit.col);
+    }
+
+    public closeMultiSelectEditor(): void {
+        document.removeEventListener('mousedown', this.onMultiSelectOutsideEvent, true);
+        document.removeEventListener('keydown', this.onMultiSelectKeyDown, true);
+        window.removeEventListener('scroll', this.onMultiSelectOutsideEvent, true);
+        this.multiSelectEdit.set(null);
+    }
+
+    private onMultiSelectOutsideEvent = (event: Event) => {
+        if (event.type === 'mousedown' && (event.target as HTMLElement)?.closest('.multi-select-editor')) {
+            return;
+        }
+        this.closeMultiSelectEditor();
+    };
+
+    private onMultiSelectKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape' || event.key === 'Enter' || event.key === 'Tab') {
+            this.closeMultiSelectEditor();
+        }
+    };
+
+    /**
+     * Clicking the option list counts as a click outside the spreadsheet, which drops the cell
+     * selection, so the edited cell is selected again
+     */
+    private reselectCell(row: number, col: number): void {
+        const spreadsheet = this.spreadsheet();
+        if (!spreadsheet) {
+            return;
+        }
+        spreadsheet.activeCell.set({ row: row, col: col });
+        spreadsheet.selectionRanges.set([{ start: { row: row, col: col }, end: { row: row, col: col } }]);
+    }
+
+    private setCellValue(row: number, col: number, value: string): void {
+        this.data.update(grid => {
+            const rows = [...grid];
+            const cells = [...rows[row]];
+            // the card id is stashed on the row array, and copying the row leaves it behind
+            (cells as any).recordId = (rows[row] as any).recordId;
+            cells[col] = { ...cells[col], value: value };
+            rows[row] = cells;
+            return rows;
+        });
+    }
+
+    private async openAttributeEditor(attribute: CardAttribute): Promise<void> {
+        // write queued column edits first, so the editor opens on what is actually saved
+        await this.flushPendingChanges();
+        const attributes = await this.attributesService.getAll();
+        this.attributeEditRequested.emit(attributes.find(saved => saved.id === attribute.id) ?? attribute);
+    }
+
+    /**
+     * Reloads the columns and rows after an attribute was edited elsewhere
+     */
+    public async refreshColumns(): Promise<void> {
+        this.attributes = await this.attributesService.getAll();
+        await this.setupColumns();
+        this.setupRows();
+    }
+
+    /**
+     * The deck attribute a spreadsheet column belongs to
+     */
+    private attributeForColumn(config: ColumnConfig | undefined): CardAttribute | undefined {
+        if (!config) {
+            return undefined;
+        }
+        return this.attributes.find(attribute => StringUtils.toKebabCase(attribute.name) === config.field)
+            // newly created columns whose field doesn't match the kebab-case name yet
+            ?? this.attributes.find(attribute => attribute.name === config.name);
     }
 
     /**
@@ -491,11 +675,7 @@ export class EntitySpreadsheetComponent implements OnInit, OnDestroy {
 
             for (let index = 0; index < newConfig.length; index++) {
                 const config = newConfig[index];
-                let attr = this.attributes.find(a => StringUtils.toKebabCase(a.name) === config.field);
-                // Fallback for newly created columns where field ID might not match toKebabCase(name) yet
-                if (!attr) {
-                    attr = this.attributes.find(a => a.name === config.name);
-                }
+                const attr = this.attributeForColumn(config);
 
                 if (attr) {
                     let changed = false;

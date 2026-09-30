@@ -1,3 +1,5 @@
 <p-card styleClass="page-card tabbed-card">
-    <app-entity-spreadsheet></app-entity-spreadsheet>
+    <app-entity-spreadsheet (attributeEditRequested)="editAttribute($event)"></app-entity-spreadsheet>
 </p-card>
+<app-entity-dialog [service]="attributesService" [visible]="attributeDialogVisible"
+    (visibleChange)="onAttributeDialogVisibleChange($event)" [entity]="editedAttribute"></app-entity-dialog>

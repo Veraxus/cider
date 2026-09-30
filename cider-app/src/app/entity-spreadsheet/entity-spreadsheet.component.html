@@ -11,3 +11,23 @@
     }
 </div>
 <p-contextmenu #rowMenu [model]="rowMenuItems" appendTo="body" />
+
+<!-- option list for multi-select cells, which the spreadsheet has no editor of its own for -->
+@if (multiSelectEdit(); as edit) {
+<div class="multi-select-editor" [style.top.px]="edit.top" [style.left.px]="edit.left"
+    [style.min-width.px]="edit.width">
+    @for (option of edit.options; track option.value) {
+    <button type="button" class="multi-select-option" [class.selected]="isMultiSelectOptionSelected(option.value)"
+        (click)="toggleMultiSelectOption(option.value)">
+        <span class="option-dot" [style.background]="option.color || 'transparent'"></span>
+        <span class="option-value">{{option.value}}</span>
+        @if (isMultiSelectOptionSelected(option.value)) {
+        <i class="pi pi-check"></i>
+        }
+    </button>
+    }
+    @if (!edit.options.length) {
+    <div class="multi-select-empty">{{ 'template-editor.no-options' | translate }}</div>
+    }
+</div>
+}
