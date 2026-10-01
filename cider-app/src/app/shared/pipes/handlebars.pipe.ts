@@ -199,6 +199,9 @@ export class HandlebarsPipe implements PipeTransform {
      * {{ranges card.levels ', ' ' to '}}     '0, 1, 2, 3, 5' -> '0 to 3, 5'
      * Like join, but runs of consecutive numbers are written as a range. Numbers are sorted and
      * repeats dropped; values that aren't numbers are kept, in the order given, after the numbers.
+     * The run that reaches the highest checked number is written as 'N+' instead of 'N-M' --
+     * since nothing higher is checked, it reads as "N and up". A lone top number (no run) is
+     * still shown plain: '0, 1, 2, 5' -> '0-2, 5', not '0-2, 5+'.
      */
     Handlebars.registerHelper('ranges', function (value, separator, rangeSeparator) {
       const glue = typeof separator === 'string' ? separator : ', ';
@@ -206,13 +209,21 @@ export class HandlebarsPipe implements PipeTransform {
       const entries = MultiSelectUtils.split(value);
       const isNumber = (entry: string) => !isNaN(Number(entry));
       const numbers = [...new Set(entries.filter(isNumber).map(Number))].sort((a, b) => a - b);
+      const highest = numbers[numbers.length - 1];
       const parts: string[] = [];
       for (let index = 0; index < numbers.length; index++) {
         const start = numbers[index];
         while (index + 1 < numbers.length && numbers[index + 1] === numbers[index] + 1) {
           index++;
         }
-        parts.push(start === numbers[index] ? '' + start : start + rangeGlue + numbers[index]);
+        const end = numbers[index];
+        if (start === end) {
+          parts.push('' + start);
+        } else if (end === highest) {
+          parts.push(start + '+');
+        } else {
+          parts.push(start + rangeGlue + end);
+        }
       }
       return parts.concat(entries.filter(entry => !isNumber(entry))).join(glue);
     });
