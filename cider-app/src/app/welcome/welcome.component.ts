@@ -156,6 +156,18 @@ export class WelcomeComponent implements OnInit {
         this.decksService.selectDeck(undefined);
         this.router.navigateByUrl(`/project`);
         this.displayLoading = false;
+      }).catch(error => {
+        // without this the loading dialog sits on 'Opening Project' forever and the only
+        // trace of the failure is a console error the user never sees
+        console.error('Error opening project', error);
+        this.displayLoading = false;
+        this.confirmationService.confirm({
+          message: 'The project could not be opened: ' + (error?.message ?? error),
+          header: 'Open Project Failed',
+          icon: 'pi pi-times-circle',
+          acceptLabel: 'Close',
+          rejectVisible: false
+        });
       });
   }
 

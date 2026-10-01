@@ -22,6 +22,16 @@ import { firstValueFrom, groupBy, mergeMap, debounceTime, filter } from 'rxjs';
 export class CardsService extends DecksChildService<Card, number> {
   static readonly CSV_INDEX_FIELD = 'csv-index';
 
+  /**
+   * Card properties the database owns, as an attribute name would kebab-case to them. A user
+   * attribute that landed on one of these would overwrite it on import: an attribute named 'ID'
+   * wrote its authored value into the primary key, so every repeated value raised a
+   * ConstraintError and opening the project failed. Those attributes get an 'attr-' prefixed
+   * field instead, e.g. {{card.attr-id}} for an attribute named 'ID'.
+   */
+  private static readonly RESERVED_FIELDS = new Set<string>([
+    'id', 'name', 'count', CardsService.CSV_INDEX_FIELD]);
+
   constructor(private attributesService: CardAttributesService,
     private cardTemplatesService: CardTemplatesService,
     decksService: DecksService, db: AppDB,
@@ -168,8 +178,9 @@ export class CardsService extends DecksChildService<Card, number> {
       }
     }
 
+    const kebabName = StringUtils.toKebabCase(attribute.name);
     return {
-      field: StringUtils.toKebabCase(attribute.name),
+      field: CardsService.RESERVED_FIELDS.has(kebabName) ? 'attr-' + kebabName : kebabName,
       header: attribute.name,
       type: attribute.type,
       description: attribute.description,
