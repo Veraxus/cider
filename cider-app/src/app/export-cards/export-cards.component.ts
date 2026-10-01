@@ -699,6 +699,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   private async buildTtsSaveObject(): Promise<File> {
     const attributes = (await this.attributesService.getAll()).filter(attribute => !attribute.isSystem);
     const descriptionAttribute = attributes.find(attribute => attribute.name.trim().toLowerCase() === 'description');
+    const deckBaseName = await this.getExportBaseName();
 
     const customDeck: { [deckKey: string]: any } = {};
     const containedObjects: any[] = [];
@@ -707,10 +708,10 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
     this.slicedCards.forEach((sheet, sheetIndex) => {
       const deckKey = sheetIndex + 1;
       const deckDefinition = {
-        FaceURL: this.resolveTtsImageUrl('sheet-front-' + sheetIndex + '.png'),
+        FaceURL: this.resolveTtsImageUrl('sheet-front-' + sheetIndex + '.png', deckBaseName),
         BackURL: this.resolveTtsImageUrl(this.excludeCardBacks
           ? 'sheet-front-' + sheetIndex + '.png'
-          : 'sheet-back-' + sheetIndex + '.png'),
+          : 'sheet-back-' + sheetIndex + '.png', deckBaseName),
         NumWidth: ExportCardsComponent.TTS_GRID_COLUMNS,
         NumHeight: ExportCardsComponent.TTS_GRID_ROWS,
         BackIsHidden: this.excludeCardBacks,
@@ -774,9 +775,13 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
    * FaceURL/BackURL in a TTS save object must be a reachable URI. If the user hasn't given us a
    * base URL to host the sprite sheets at, fall back to the bare filename so the JSON is still
    * complete -- the user then hosts the images and edits these paths (or the file in place).
+   * The base URL may contain a {{deck-name}} placeholder, substituted with the kebab-cased deck
+   * name, so one saved URL pattern works across every deck's export.
    */
-  private resolveTtsImageUrl(fileName: string): string {
-    const base = (this.ttsImageBaseUrl || '').trim().replace(/\/+$/, '');
+  private resolveTtsImageUrl(fileName: string, deckBaseName: string): string {
+    const base = (this.ttsImageBaseUrl || '').trim()
+      .replace(/\{\{\s*deck-name\s*\}\}/gi, deckBaseName)
+      .replace(/\/+$/, '');
     return base ? base + '/' + fileName : fileName;
   }
 

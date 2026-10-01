@@ -59,6 +59,20 @@ function createWindow(): BrowserWindow {
   }
   win.loadURL(appUrl);
 
+  // Without an explicit handler, Electron's default save dialog isn't attached to any window,
+  // so window managers (notably on Linux) can place it behind the main window instead of on
+  // top of it. Showing it with `win` as the parent makes it a proper modal child.
+  win.webContents.session.on('will-download', (event, item) => {
+    const savePath = dialog.showSaveDialogSync(win, {
+      defaultPath: item.getFilename()
+    });
+    if (savePath) {
+      item.setSavePath(savePath);
+    } else {
+      item.cancel();
+    }
+  });
+
   // Ctrl+R (Cmd+R on macOS) reloads the project from disk instead of the page. Reloading the
   // page on an app route (e.g. .../decks/1/cards) finds no file and leaves a blank window.
   win.webContents.on('before-input-event', (event, input) => {

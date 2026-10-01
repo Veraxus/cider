@@ -129,7 +129,7 @@
         "max-tts-pixels": "Maksimum TTS Pikseli",
         "tts-hide-when-face-down": "Prevent Mouseover Spoilers (Face-Down Cards)",
         "tts-image-base-url": "TTS Image Host URL (optional)",
-        "tts-image-base-url-info": "cards.json is included in the zip and can be dragged straight into Tabletop Simulator with every card's name and custom fields attached. To also auto-load the sprite sheets, host the extracted images somewhere and put that folder's URL here before exporting; otherwise edit the FaceURL/BackURL fields in cards.json yourself afterward.",
+        "tts-image-base-url-info": "cards.json is included in the zip and can be dragged straight into Tabletop Simulator with every card's name and custom fields attached. To also auto-load the sprite sheets, host the extracted images somewhere and put that folder's URL here before exporting; otherwise edit the FaceURL/BackURL fields in cards.json yourself afterward. Use {{deck-name}} in the URL as a placeholder for the current deck's sanitized name (e.g. \"Minor Injuries\" becomes \"minor-injuries\").",
         "scale": "Ölçek (resimleri büyüt/küçült)",
         "use-card-name": "Kart Adını Kullan",
         "select-cards": "Kartları Seç",
