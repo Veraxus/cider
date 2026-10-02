@@ -699,7 +699,9 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
   private async buildTtsSaveObject(): Promise<File> {
     const attributes = (await this.attributesService.getAll()).filter(attribute => !attribute.isSystem);
     const descriptionAttribute = attributes.find(attribute => attribute.name.trim().toLowerCase() === 'description');
-    const deckBaseName = await this.getExportBaseName();
+    const deck = await firstValueFrom(this.decksService.getSelectedDeck());
+    const deckName = deck?.name || '';
+    const deckBaseName = (deckName && StringUtils.toKebabCase(deckName)) || 'cards';
 
     const customDeck: { [deckKey: string]: any } = {};
     const containedObjects: any[] = [];
@@ -714,7 +716,10 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
           : 'sheet-back-' + sheetIndex + '.png', deckBaseName),
         NumWidth: ExportCardsComponent.TTS_GRID_COLUMNS,
         NumHeight: ExportCardsComponent.TTS_GRID_ROWS,
-        BackIsHidden: this.excludeCardBacks,
+        // BackIsHidden tells TTS to actually use BackURL as each card's face-down art instead of
+        // its default fallback (the last slot of the FACE sheet). Without this, our real card
+        // backs are silently ignored and HideWhenFaceDown has nothing correct to hide behind.
+        BackIsHidden: !this.excludeCardBacks,
         UniqueBack: !this.excludeCardBacks,
         Type: 0
       };
@@ -757,7 +762,7 @@ export class ExportCardsComponent implements OnInit, AfterViewChecked {
             rotX: 0, rotY: 180, rotZ: 180,
             scaleX: 1, scaleY: 1, scaleZ: 1
           },
-          Nickname: '',
+          Nickname: deckName,
           Description: '',
           GMNotes: '',
           HideWhenFaceDown: this.ttsHideWhenFaceDown,
